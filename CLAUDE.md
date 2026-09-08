@@ -30,6 +30,14 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
   user, which is how it was found. Always call `public.current_staff_role()`
   (defined in `0001_init.sql`, a `SECURITY DEFINER STABLE` function that
   bypasses RLS internally) instead.
+- **`AUTH_AUTO_LOGIN` — temporary, added Sept 2026 for a day of UI
+  testing, should come back out (or stay off) once that's done.** When
+  set, `src/lib/supabase/proxy.ts` silently signs every visitor in as one
+  Supabase Auth test account instead of showing `/login` — see the
+  comment there, `scripts/seed-test-user.mjs` (creates/promotes that
+  account to admin), and the README's "Testing without the login screen"
+  section. It's off by default (`.env.local.example`); don't turn it on
+  in a deployed environment.
 - `src/types/database.types.ts` is hand-written to match the migrations
   (real `supabase gen types` output isn't available — no live project is
   linked from this sandbox). Keep it in sync by hand when a migration

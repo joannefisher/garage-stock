@@ -191,6 +191,29 @@ supabase/
    npx supabase gen types typescript --project-id <your-project-ref> > src/types/database.types.ts
    ```
 
+## Testing without the login screen (temporary)
+
+Added Sept 2026 for a day of UI testing — **turn this off before real
+use**, it removes the login screen's access control for anyone who
+reaches the app's URL.
+
+1. In `.env.local`, set `AUTH_AUTO_LOGIN_EMAIL` / `AUTH_AUTO_LOGIN_PASSWORD`
+   to any credentials you choose (don't need to be a real email).
+2. Run `npm run seed:test-user` once — creates that Supabase Auth account
+   (or resets its password if it already exists) and promotes it to
+   `admin`, so testing isn't blocked by the mechanic-role UI restrictions.
+3. Set `AUTH_AUTO_LOGIN=true` and restart the dev server. Every visitor
+   is now silently signed in as that account instead of seeing `/login`
+   — see the comment in `src/lib/supabase/proxy.ts` for exactly how.
+4. To go back to normal, set `AUTH_AUTO_LOGIN=false` (or delete the three
+   `AUTH_AUTO_LOGIN*` lines) — the real login screen comes straight back,
+   and the test account still works as a normal login if you want to keep
+   using it deliberately rather than automatically.
+
+This only ever signs in as one real, RLS-governed Supabase account — it's
+not a blanket "no auth" switch, and every permission described under
+**Auth model** still applies to whatever role that account has.
+
 ## shadcn/ui components
 
 The base UI primitives (`button`, `input`, `label`, `card`, `badge`) were
