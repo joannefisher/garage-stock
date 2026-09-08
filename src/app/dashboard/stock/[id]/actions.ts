@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentStaff } from "@/lib/auth/current-staff"
 
 export async function recordUsage(formData: FormData) {
   const stockItemId = String(formData.get("stock_item_id") ?? "")
@@ -49,6 +50,19 @@ export async function recordAdjustment(formData: FormData) {
   } = await supabase.auth.getUser()
 
   if (!user) redirect("/login")
+
+  // Mirrors the "Admins/managers can record other stock movements" RLS
+  // policy (0004_mechanic_permissions.sql), which is what actually blocks
+  // a mechanic here — this just avoids surfacing a raw RLS error.
+  const staff = await getCurrentStaff()
+  if (!staff?.canManageStock) {
+    redirect(
+      `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(
+        "Only admins and managers can adjust stock."
+      )}`
+    )
+  }
+
   if (!stockItemId || quantity === 0) {
     redirect(
       `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(

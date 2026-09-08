@@ -2,30 +2,19 @@ import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { logout } from "@/app/login/actions"
-import type { StaffRole } from "@/types/database.types"
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/stock", label: "Stock" },
+  { href: "/dashboard/vehicles", label: "Vehicles" },
 ] as const
 
 export async function SiteHeader() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  let role: StaffRole | null = null
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single()
-    role = profile?.role ?? null
-  }
+  const staff = await getCurrentStaff()
+  const user = staff ? { email: staff.email } : null
+  const role = staff?.role ?? null
 
   return (
     <header className="border-b bg-background">

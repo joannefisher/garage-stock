@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockItemType, TyreSeason, TyreTier } from "@/types/database.types"
 
 function str(formData: FormData, key: string): string {
@@ -29,6 +30,20 @@ export async function createStockItem(formData: FormData) {
 
   if (!user) {
     redirect("/login")
+  }
+
+  // UI-level guard mirroring the "Admins/managers can manage stock items"
+  // RLS policy (0002_domain_schema.sql) — the insert below would be
+  // rejected by RLS regardless, but checking here first gives a plain
+  // error message instead of a raw Postgres RLS failure. This is not the
+  // security boundary; see the comment on getCurrentStaff().
+  const staff = await getCurrentStaff()
+  if (!staff?.canManageStock) {
+    redirect(
+      `/dashboard/stock/new?error=${encodeURIComponent(
+        "Only admins and managers can add stock items."
+      )}`
+    )
   }
 
   const itemType = str(formData, "item_type") as StockItemType

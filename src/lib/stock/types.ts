@@ -23,4 +23,5 @@ export interface StockSearchParams {
   tyre_season?: string
   tyre_tier?: string
   tyre_commercial?: string
+  error?: string
 }

@@ -20,7 +20,10 @@
  * the database rejects an explicit value for those.
  */
 
-export type StaffRole = "admin" | "manager" | "staff"
+// 'staff' is a legacy fallback value — new accounts default to
+// 'mechanic' as of migration 0004. Kept on the enum for compatibility;
+// don't default new UI to it.
+export type StaffRole = "admin" | "manager" | "mechanic" | "staff"
 export type StockItemType = "part" | "tyre"
 export type TyreSeason = "summer" | "winter" | "all_season"
 export type TyreTier = "budget" | "mid_range" | "premium"

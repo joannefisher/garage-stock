@@ -1,0 +1,11 @@
+-- 0003_add_mechanic_role.sql
+-- Adds an explicit 'mechanic' role, distinct from the generic 'staff'
+-- fallback, per Joanne: mechanics get a more restricted UI/permission set
+-- than admin/manager.
+--
+-- This MUST be its own migration/transaction, separate from anything that
+-- references the new value ('mechanic') in a comparison — Postgres
+-- forbids using a freshly-added enum value until the transaction that
+-- added it has committed. See 0004_mechanic_permissions.sql for the
+-- policy changes that actually use it.
+alter type public.staff_role add value 'mechanic';

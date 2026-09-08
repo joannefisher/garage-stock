@@ -26,22 +26,50 @@ what's built vs. still open.
   public sign-up.
 - Every staff member has a `profiles` row (`id`, `full_name`, `role`,
   timestamps) created automatically on account creation.
-- Roles: `admin`, `manager`, `staff` (see `supabase/migrations/0001_init.sql`
-  — extend the `staff_role` enum once real roles are confirmed).
+- Roles: `admin`, `manager`, `mechanic`, plus a legacy `staff` value kept
+  on the enum for compatibility but no longer used for new accounts (see
+  `supabase/migrations/0001_init.sql` and `0003_add_mechanic_role.sql`).
 - `src/proxy.ts` redirects signed-out visitors to `/login` and refreshes
   the Supabase session cookie on every request.
 - Row Level Security is enabled on every table from the start. Only
   `admin` can change roles/manage other staff profiles (0001_init.sql);
   both `admin` and `manager` can manage the stock catalogue, suppliers,
   orders, returns and vehicle data (0002_domain_schema.sql). Any
-  authenticated staff member can record a `stock_movements` row (that's
-  how a mechanic logs using a part against a job) but not edit/delete one
-  — it's an append-only ledger.
-- The user stories talk about "admin" and "mechanic" users. There's no
-  separate `mechanic` role value — a mechanic is just a `staff` profile
-  (the same role a non-admin, non-manager account gets by default).
-  Rename/extend `staff_role` in a new migration if you want that split
-  named explicitly.
+  authenticated staff member (mechanics included) can record a `used`
+  `stock_movements` row against a job number; every other movement type
+  (`initial`, `goods_in`, `return_to_supplier`, `adjustment`) is
+  admin/manager only (0004_mechanic_permissions.sql) — a mechanic can log
+  using a part on a job, but can't use `adjustment` to set stock to
+  anything with no job reference. The ledger itself is append-only for
+  everyone — no update/delete policy on `stock_movements`.
+- **Mechanic role, and its UI**: a dedicated `mechanic` role now exists
+  (added in 0003/0004, see **Migration history** below) rather than
+  reusing the generic `staff` fallback. In the app, a mechanic gets the
+  same `/dashboard/stock` search and item-detail screens as admin/manager,
+  but: cost price and selling price are hidden everywhere, and the "Add
+  stock item" and "Adjust stock" actions aren't shown — mechanics can only
+  record usage against a job. This is UI-only convenience; the actual
+  enforcement is the RLS policies above, so even if the UI were bypassed
+  (calling the API directly), a mechanic account still can't write
+  anything RLS doesn't allow. See `src/lib/auth/current-staff.ts`.
+- **RLS recursion bug, found and fixed during development** — worth
+  knowing about even though nothing in the app surfaced it as a bug
+  report. The original admin/manager RLS policies used an inline
+  correlated subquery (`exists (select 1 from profiles where id =
+  auth.uid() and role = 'admin')`) inside policies on `profiles` itself
+  and on every other table. That pattern causes Postgres to re-apply
+  `profiles`' own RLS policies while evaluating the subquery — including
+  that same policy — which recurses infinitely and fails with "infinite
+  recursion detected in policy for relation "profiles"". This wasn't
+  caught by earlier testing because that testing ran as the Postgres
+  superuser, which bypasses RLS entirely. Retesting with a real
+  `authenticated`-role, non-superuser harness surfaced it. Fixed by adding
+  a `SECURITY DEFINER STABLE` helper function, `public.current_staff_role()`
+  (0001_init.sql), which every admin/manager policy now calls instead of
+  querying `profiles` inline — see the comment above that function for the
+  full explanation. If you ever add a new policy that needs to check
+  another user's role, use `current_staff_role()`, don't write the inline
+  subquery again.
 
 New staff accounts are created via the Supabase dashboard (Authentication
 → Users → Invite/Add user) or a small admin script using the service role
@@ -54,9 +82,12 @@ src/
   app/
     login/            Sign-in page + server actions (login/logout)
     dashboard/
-      stock/            Stock search/list + filters (story: admin search)
-        new/             Add a part or tyre (story: collect stock data)
-        [id]/            Item detail, record usage (mechanic), adjustments
+      stock/            Stock search/list + filters (story: admin search) —
+                          cost/sell price and admin actions hidden for mechanics
+        new/             Add a part or tyre (admin/manager only)
+        [id]/            Item detail, record usage (any staff), adjustments (admin/manager)
+      vehicles/          Reg lookup: on-file vehicle + lubricants/fitments, or
+                          a fresh DVSA API lookup with a save-to-file action
       page.tsx           Dashboard placeholder
     page.tsx            Redirects to /dashboard or /login
   components/
@@ -64,11 +95,15 @@ src/
     layout/             Site header/nav
     stock/              Stock filters + the add-item form
   lib/
+    auth/
+      current-staff.ts   Server helper: signed-in user + role + UI permission flags
     supabase/
       client.ts         Supabase client for Client Components
       server.ts          Supabase client for Server Components/Actions
       proxy.ts            Session refresh + route protection (used by src/proxy.ts)
     stock/types.ts       Shared TS types for stock list/search queries
+    vehicle-lookup/      DVSA MOT History API client (registration -> make/model)
+                          — see accuracy caveat in dvsa-mot-history.ts
     utils.ts             cn() class-merging helper
   types/
     database.types.ts    Hand-written types matching the migrations below —
@@ -81,6 +116,10 @@ supabase/
                             stock_movements ledger, purchase orders,
                             supplier returns, vehicles/fitment/lubricants,
                             reorder + cost reporting views
+    0003_add_mechanic_role.sql   Adds 'mechanic' to the staff_role enum
+    0004_mechanic_permissions.sql New accounts default to 'mechanic'; splits
+                                   the stock_movements insert policy so only
+                                   'used' movements are open to every role
 ```
 
 ## Getting started
@@ -99,9 +138,10 @@ supabase/
    cp .env.local.example .env.local
    ```
 
-3. Apply both migrations, in order (`0001_init.sql` then
-   `0002_domain_schema.sql`) — either paste them into the Supabase SQL
-   Editor one at a time, or push them with the Supabase CLI:
+3. Apply all four migrations, in order (`0001_init.sql`, `0002_domain_schema.sql`,
+   `0003_add_mechanic_role.sql`, `0004_mechanic_permissions.sql`) — either
+   paste them into the Supabase SQL Editor one at a time, or push them with
+   the Supabase CLI:
 
    ```bash
    npx supabase login
@@ -109,18 +149,26 @@ supabase/
    npx supabase db push
    ```
 
-   Both migrations were applied and exercised against a real local
-   Postgres 16 during development (opening balances, using stock against
-   a job, the reorder-report view, the sign-check constraint on
-   `stock_movements`) — they're not just syntax-checked.
+   `0003` and `0004` are separate migrations deliberately: Postgres
+   requires `ALTER TYPE ... ADD VALUE` to be committed in its own
+   transaction before the new enum value (`'mechanic'`) can be referenced
+   anywhere else, so `0004` (which uses it) has to be a later migration,
+   not appended to `0003`.
+
+   All four were applied and exercised against a real local Postgres 16
+   during development — not just syntax-checked. That included rebuilding
+   the RLS test harness to run as a real `authenticated`-role user rather
+   than the Postgres superuser (which bypasses RLS and would have hidden
+   the recursion bug described under **Auth model** above).
 
 4. In Supabase Auth settings, disable public sign-ups (Authentication →
    Providers → Email → disable "Allow new users to sign up") — staff
    accounts are created by an admin, not self-registered.
 
 5. Create your own account: Authentication → Users → Add user (this fires
-   the trigger that creates your `profiles` row as `role = 'staff'`).
-   Then, in the SQL Editor, promote yourself to admin:
+   the trigger that creates your `profiles` row — `role = 'mechanic'` by
+   default as of migration 0004). Then, in the SQL Editor, promote
+   yourself to admin:
 
    ```sql
    update public.profiles set role = 'admin' where id = '<your-user-id>';
@@ -200,11 +248,22 @@ Built from the first batch of user stories:
 
 ## What's built vs. still open
 
-Built: auth, the full domain schema above, and one screen slice —
-`/dashboard/stock` (search/filter by ID/barcode/name, type, supplier,
-vehicle make/model, tyre size/season/tier/commercial), `/dashboard/stock/new`
-(add a part or tyre with an opening balance), and `/dashboard/stock/[id]`
-(detail view, record usage against a job number, manual adjustments).
+Built: auth (with a distinct `mechanic` role, see **Auth model**), the
+full domain schema above, and two screen slices:
+
+- `/dashboard/stock` (search/filter by ID/barcode/name, type, supplier,
+  vehicle make/model, tyre size/season/tier/commercial), `/dashboard/stock/new`
+  (add a part or tyre with an opening balance, admin/manager only), and
+  `/dashboard/stock/[id]` (detail view, record usage against a job number
+  for any staff, manual adjustments for admin/manager only). Cost/sell
+  price and the add/adjust actions are hidden from mechanics in the UI,
+  backed by the RLS policies described under **Auth model**.
+- `/dashboard/vehicles` — search by registration. Shows the vehicle,
+  lubricant specs and fitments already on file if there's a match;
+  otherwise, if the DVSA MOT History API is configured (see **Vehicle
+  reg/VIN lookup** below), looks it up there and lets an admin/manager
+  save it into the vehicle file. Any signed-in staff member can search;
+  saving a new lookup result is admin/manager only.
 
 Not built yet — next slices, roughly in story order:
 
@@ -213,25 +272,52 @@ Not built yet — next slices, roughly in story order:
 - Supplier returns: create/process a return.
 - Reports UI for `v_reorder_report` and the weekly cost views (the SQL
   views exist; there's no page rendering them yet).
-- Vehicle reg/VIN search screen, and maintaining `vehicle_models` /
-  fitment / lubricant data.
+- Editing `vehicle_models` (generation, year range, engine code) and
+  maintaining lubricant/fitment data — `/dashboard/vehicles` can create a
+  bare-bones model row from a lookup, but there's no screen yet for
+  filling in the rest, or for a model that has more than one generation
+  on file.
 - Barcode scanning in the UI — a USB/Bluetooth scanner needs no special
   handling (it types into the focused search/ID field like a keyboard),
   but camera-based scanning on a phone/tablet needs a small JS library
   (e.g. `@zxing/browser`) — not wired up yet.
-- Hiding admin-only actions (add/edit stock, orders, returns) in the UI
-  for `staff`-role accounts — RLS already blocks the writes at the
-  database level, but the buttons aren't conditionally hidden yet.
+
+## Vehicle reg/VIN lookup
+
+Answering the "is there a free API for this?" question: yes, with
+caveats.
+
+- **DVLA Vehicle Enquiry Service (VES)** — free, but at the time this was
+  researched (Sept 2026) registration for new API access was closed, and
+  even when available it only returns vehicle **make**, not model — not
+  enough on its own for the fitment/lubricant lookup this needs.
+- **DVSA MOT History API** — free to register (DVSA quoted ~5 working
+  days for approval), and returns both make and model. This is what's
+  wired up, in `src/lib/vehicle-lookup/`. It's structured as a small
+  provider interface (`src/lib/vehicle-lookup/types.ts`) so a different
+  or paid provider can be swapped in later without touching the pages
+  that use it.
+
+**Important caveat on the DVSA integration**: this sandbox has no DVSA API
+credentials, so nothing in `src/lib/vehicle-lookup/dvsa-mot-history.ts`
+has been exercised against the live API. What's implemented and
+corroborated across independent sources of DVSA's current documentation:
+the OAuth2 client-credentials token exchange (Microsoft Entra ID), and the
+lookup endpoint's base URL, path, method and auth headers. What's **not**
+independently confirmed: the exact JSON response field names — the
+DVSA docs site renders its API specification via a JavaScript
+Swagger/OpenAPI UI that couldn't be read as static text during this
+research, so the field names used (`make`, `model`, `primaryColour`,
+`fuelType`) are carried over from DVSA's older, deprecated beta API as an
+educated guess, not a citation. See the long comment at the top of that
+file before relying on this in production — response parsing is isolated
+in one function specifically so it's a quick fix once real credentials are
+available to test against. Until `DVSA_MOT_HISTORY_*` env vars are set
+(see `.env.local.example`), `/dashboard/vehicles` just shows a "not
+configured" message for anything not already on file.
 
 ## Open questions / assumptions to confirm
 
 - **Single site/location** — `quantity_on_hand` and `ideal_stock_level`
   are per stock item, not per-location. Flag if a second site is ever on
-  the cards.
-- **Reg/VIN → vehicle data source** — left as manual entry for now (no
-  DVLA/VIN-decode API wired up). The schema is structured so that can be
-  added later (an API lookup would just populate `vehicles` and, ideally,
-  `vehicle_models`) without restructuring fitment/lubricant data.
-- **"Mechanic" role** — mapped to the existing `staff` role rather than
-  adding a new role value. Say if mechanics need permissions distinct
-  from other non-admin staff.
+  the cards. (Confirmed with Joanne: no second site for now.)

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { StockFilters } from "@/components/stock/stock-filters"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockItemWithDetails, StockSearchParams } from "@/lib/stock/types"
 
 function matchesTypeFilters(item: StockItemWithDetails, params: StockSearchParams) {
@@ -50,6 +51,8 @@ function matchesTypeFilters(item: StockItemWithDetails, params: StockSearchParam
 export default async function StockPage(props: PageProps<"/dashboard/stock">) {
   const searchParams = (await props.searchParams) as StockSearchParams
   const supabase = await createClient()
+  const staff = await getCurrentStaff()
+  const canManageStock = staff?.canManageStock ?? false
 
   const [{ data: suppliers }, stockQuery] = await Promise.all([
     supabase.from("suppliers").select("id, name").order("name"),
@@ -95,12 +98,20 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
             Search parts and tyres, or add new stock.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/stock/new">Add stock item</Link>
-        </Button>
+        {canManageStock && (
+          <Button asChild>
+            <Link href="/dashboard/stock/new">Add stock item</Link>
+          </Button>
+        )}
       </div>
 
       <StockFilters suppliers={suppliers ?? []} />
+
+      {searchParams.error && (
+        <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          {searchParams.error}
+        </p>
+      )}
 
       {error && (
         <p className="text-sm text-destructive">
@@ -119,8 +130,12 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
               <th className="px-3 py-2 font-medium">Supplier</th>
               <th className="px-3 py-2 text-right font-medium">On hand</th>
               <th className="px-3 py-2 text-right font-medium">Ideal</th>
-              <th className="px-3 py-2 text-right font-medium">Cost</th>
-              <th className="px-3 py-2 text-right font-medium">Sell</th>
+              {canManageStock && (
+                <>
+                  <th className="px-3 py-2 text-right font-medium">Cost</th>
+                  <th className="px-3 py-2 text-right font-medium">Sell</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -164,13 +179,20 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                   {item.quantity_on_hand}
                 </td>
                 <td className="px-3 py-2 text-right">{item.ideal_stock_level}</td>
-                <td className="px-3 py-2 text-right">£{item.cost_price.toFixed(2)}</td>
-                <td className="px-3 py-2 text-right">£{item.selling_price.toFixed(2)}</td>
+                {canManageStock && (
+                  <>
+                    <td className="px-3 py-2 text-right">£{item.cost_price.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right">£{item.selling_price.toFixed(2)}</td>
+                  </>
+                )}
               </tr>
             ))}
             {items.length === 0 && !error && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                <td
+                  colSpan={canManageStock ? 9 : 7}
+                  className="px-3 py-8 text-center text-muted-foreground"
+                >
                   No stock items match your search.
                 </td>
               </tr>

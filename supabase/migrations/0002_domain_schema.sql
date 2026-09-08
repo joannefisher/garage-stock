@@ -389,73 +389,82 @@ alter table public.vehicles enable row level security;
 alter table public.vehicle_model_lubricants enable row level security;
 alter table public.vehicle_model_fitments enable row level security;
 
--- Helper condition, repeated inline (Postgres RLS policies can't share a
--- function easily across tables without an extra round trip, so it's
--- duplicated per policy below): admin/manager check via profiles.
--- select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin','manager')
+-- Admin/manager check goes through public.current_staff_role() (defined
+-- in 0001_init.sql), NOT an inline `exists (select ... from profiles
+-- ...)` — an inline correlated subquery against profiles from a policy
+-- on another table still triggers profiles' own RLS to evaluate that
+-- subquery, and profiles has a self-referential admin policy, so it
+-- recurses infinitely ("infinite recursion detected in policy for
+-- relation \"profiles\""). current_staff_role() is SECURITY DEFINER and
+-- sidesteps this. See the comment above that function for the full
+-- explanation — this was hit and fixed during development, don't
+-- reintroduce the inline form.
 
 create policy "Staff can read suppliers" on public.suppliers for select to authenticated using (true);
 create policy "Admins/managers can manage suppliers" on public.suppliers for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read stock items" on public.stock_items for select to authenticated using (true);
 create policy "Admins/managers can manage stock items" on public.stock_items for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read part details" on public.part_details for select to authenticated using (true);
 create policy "Admins/managers can manage part details" on public.part_details for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read tyre details" on public.tyre_details for select to authenticated using (true);
 create policy "Admins/managers can manage tyre details" on public.tyre_details for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read stock movements" on public.stock_movements for select to authenticated using (true);
 create policy "Staff can record stock movements" on public.stock_movements for insert to authenticated
   with check (performed_by = auth.uid());
 -- No update/delete policy: the ledger is append-only. Corrections go in
--- as a new 'adjustment' movement, not an edit to history.
+-- as a new 'adjustment' movement, not an edit to history. This INSERT
+-- policy is further narrowed in 0004_mechanic_permissions.sql (split by
+-- movement_type once the 'mechanic' role exists) — a mechanic should
+-- only ever record 'used' movements, not arbitrary adjustments.
 
 create policy "Staff can read purchase orders" on public.purchase_orders for select to authenticated using (true);
 create policy "Admins/managers can manage purchase orders" on public.purchase_orders for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read purchase order lines" on public.purchase_order_lines for select to authenticated using (true);
 create policy "Admins/managers can manage purchase order lines" on public.purchase_order_lines for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read supplier returns" on public.supplier_returns for select to authenticated using (true);
 create policy "Admins/managers can manage supplier returns" on public.supplier_returns for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read supplier return lines" on public.supplier_return_lines for select to authenticated using (true);
 create policy "Admins/managers can manage supplier return lines" on public.supplier_return_lines for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read vehicle models" on public.vehicle_models for select to authenticated using (true);
 create policy "Admins/managers can manage vehicle models" on public.vehicle_models for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read vehicles" on public.vehicles for select to authenticated using (true);
 create policy "Admins/managers can manage vehicles" on public.vehicles for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read vehicle lubricants" on public.vehicle_model_lubricants for select to authenticated using (true);
 create policy "Admins/managers can manage vehicle lubricants" on public.vehicle_model_lubricants for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));
 
 create policy "Staff can read vehicle fitments" on public.vehicle_model_fitments for select to authenticated using (true);
 create policy "Admins/managers can manage vehicle fitments" on public.vehicle_model_fitments for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('admin', 'manager')));
+  using (public.current_staff_role() in ('admin', 'manager'))
+  with check (public.current_staff_role() in ('admin', 'manager'));

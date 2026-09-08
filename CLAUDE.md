@@ -11,9 +11,25 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
   session refresh live in `src/proxy.ts` / `src/lib/supabase/proxy.ts`, not
   `middleware.ts`. Don't recreate a `middleware.ts` file.
 - Auth: individual staff logins via Supabase Auth, roles on
-  `public.profiles` (`admin` / `manager` / `staff`), RLS enabled on every
-  table. No public sign-up page by design. The user stories' "mechanic"
-  persona maps to the `staff` role — there's no separate `mechanic` value.
+  `public.profiles` (`admin` / `manager` / `mechanic`, plus a legacy
+  `staff` fallback no longer used for new accounts — see
+  `supabase/migrations/0003_add_mechanic_role.sql` and
+  `0004_mechanic_permissions.sql`), RLS enabled on every table. No public
+  sign-up page by design. `src/lib/auth/current-staff.ts` is the shared
+  server helper for "who's signed in / what role / can they manage
+  stock" — use it rather than re-querying `profiles` ad hoc, and remember
+  it's a UI convenience only, not the security boundary (RLS is).
+- **RLS gotcha, already hit once — don't reintroduce it**: never write an
+  inline correlated subquery against `profiles` inside an RLS policy
+  (`exists (select 1 from profiles where id = auth.uid() and role =
+  ...)`), including in a policy defined on `profiles` itself. It causes
+  infinite recursion ("infinite recursion detected in policy for relation
+  \"profiles\""), because evaluating that subquery re-triggers `profiles`'
+  own RLS. This is invisible if you test as the Postgres superuser (which
+  bypasses RLS) — it only shows up testing as a real `authenticated`-role
+  user, which is how it was found. Always call `public.current_staff_role()`
+  (defined in `0001_init.sql`, a `SECURITY DEFINER STABLE` function that
+  bypasses RLS internally) instead.
 - `src/types/database.types.ts` is hand-written to match the migrations
   (real `supabase gen types` output isn't available — no live project is
   linked from this sandbox). Keep it in sync by hand when a migration
@@ -35,10 +51,16 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
   manual reg/VIN entry for now, mechanic→staff role mapping). Both
   migrations were applied and exercised against a real local Postgres 16
   during development, not just syntax-checked.
-- Only a first UI slice is built: `/dashboard/stock` (search/filter),
-  `/dashboard/stock/new` (add item), `/dashboard/stock/[id]` (detail,
-  record usage, adjustments). Purchase orders, supplier returns, the
-  reorder/cost report views, vehicle reg/VIN search, and barcode camera
+- Two UI slices are built: `/dashboard/stock` (search/filter — cost/sell
+  price and admin-only actions hidden from mechanics), `/dashboard/stock/new`
+  (add item, admin/manager only), `/dashboard/stock/[id]` (detail, record
+  usage — any staff — and adjustments — admin/manager only), and
+  `/dashboard/vehicles` (registration search against the vehicle file,
+  falling back to a DVSA MOT History API lookup — see
+  `src/lib/vehicle-lookup/dvsa-mot-history.ts` for an important accuracy
+  caveat on that integration, it hasn't been tested against live DVSA
+  credentials). Purchase orders, supplier returns, the reorder/cost report
+  views, editing vehicle model/lubricant/fitment data, and barcode camera
   scanning have schema/views but no screens yet — see README's "What's
   built vs. still open" before assuming something exists.
 - Stock list/detail queries filter on stock catalogue size assumptions:

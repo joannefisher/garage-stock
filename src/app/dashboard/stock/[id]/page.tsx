@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockItemWithDetails } from "@/lib/stock/types"
 
 import { recordAdjustment, recordUsage } from "./actions"
@@ -16,6 +17,8 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
   const error = typeof searchParams.error === "string" ? searchParams.error : undefined
 
   const supabase = await createClient()
+  const staff = await getCurrentStaff()
+  const canManageStock = staff?.canManageStock ?? false
 
   const [{ data: item }, { data: movements }] = await Promise.all([
     supabase
@@ -62,8 +65,12 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
             <Row label="Supplier" value={stockItem.suppliers?.name ?? "—"} />
             <Row label="On hand" value={String(stockItem.quantity_on_hand)} />
             <Row label="Ideal level" value={String(stockItem.ideal_stock_level)} />
-            <Row label="Cost price" value={`£${stockItem.cost_price.toFixed(2)}`} />
-            <Row label="Selling price" value={`£${stockItem.selling_price.toFixed(2)}`} />
+            {canManageStock && (
+              <>
+                <Row label="Cost price" value={`£${stockItem.cost_price.toFixed(2)}`} />
+                <Row label="Selling price" value={`£${stockItem.selling_price.toFixed(2)}`} />
+              </>
+            )}
             <Row label="Location" value={stockItem.location ?? "—"} />
             {stockItem.item_type === "part" && stockItem.part_details && (
               <>
@@ -132,29 +139,31 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Adjust stock</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={recordAdjustment} className="flex flex-col gap-3">
-              <input type="hidden" name="stock_item_id" value={stockItem.id} />
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="adjustment_quantity">
-                  Adjustment (+/-)
-                </Label>
-                <Input id="adjustment_quantity" name="quantity" type="number" required />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="adjustment_notes">Reason</Label>
-                <Input id="adjustment_notes" name="notes" placeholder="e.g. stock check correction" />
-              </div>
-              <Button type="submit" variant="outline">
-                Apply adjustment
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        {canManageStock && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Adjust stock</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form action={recordAdjustment} className="flex flex-col gap-3">
+                <input type="hidden" name="stock_item_id" value={stockItem.id} />
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="adjustment_quantity">
+                    Adjustment (+/-)
+                  </Label>
+                  <Input id="adjustment_quantity" name="quantity" type="number" required />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="adjustment_notes">Reason</Label>
+                  <Input id="adjustment_notes" name="notes" placeholder="e.g. stock check correction" />
+                </div>
+                <Button type="submit" variant="outline">
+                  Apply adjustment
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>
