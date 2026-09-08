@@ -86,14 +86,23 @@ src/
                           cost/sell price and admin actions hidden for mechanics
         new/             Add a part or tyre (admin/manager only)
         [id]/            Item detail, record usage (any staff), adjustments (admin/manager)
+      stock-takes/       Scan-and-count stocktake sessions + tracked discrepancy
+                          report, printable and PDF-downloadable
+        [id]/            One stock take: scan/count form (in progress) or
+                          report (completed) — same page, print-friendly
       vehicles/          Reg lookup: on-file vehicle + lubricants/fitments, or
                           a fresh DVSA API lookup with a save-to-file action
       page.tsx           Dashboard placeholder
+    api/
+      stock-takes/[id]/pdf/route.ts  Generates the stock take report as a PDF (pdfkit)
     page.tsx            Redirects to /dashboard or /login
   components/
     ui/                 shadcn/ui primitives (button, input, card, ...)
     layout/             Site header/nav
     stock/              Stock filters + the add-item form
+    scan/
+      scannable-id-input.tsx  Text input + live camera barcode scan (@zxing/browser),
+                               used for the stock ID/barcode field everywhere it appears
   lib/
     auth/
       current-staff.ts   Server helper: signed-in user + role + UI permission flags
@@ -102,6 +111,10 @@ src/
       server.ts          Supabase client for Server Components/Actions
       proxy.ts            Session refresh + route protection (used by src/proxy.ts)
     stock/types.ts       Shared TS types for stock list/search queries
+    stock-takes/
+      report.ts           Shared query/compute logic for the stock take report —
+                           used by both the report page and the PDF route so they
+                           can't drift apart
     vehicle-lookup/      DVSA MOT History API client (registration -> make/model)
                           — see accuracy caveat in dvsa-mot-history.ts
     utils.ts             cn() class-merging helper
@@ -120,6 +133,11 @@ supabase/
     0004_mechanic_permissions.sql New accounts default to 'mechanic'; splits
                                    the stock_movements insert policy so only
                                    'used' movements are open to every role
+    0005_merge_id_and_barcode.sql Drops stock_items.barcode — ID number and
+                                   barcode are the same field now
+    0006_stock_takes.sql   Stock take sessions + per-item counts, with RLS
+                            (any staff can count while in progress; starting/
+                            completing is admin/manager only)
 ```
 
 ## Getting started
@@ -138,8 +156,7 @@ supabase/
    cp .env.local.example .env.local
    ```
 
-3. Apply all four migrations, in order (`0001_init.sql`, `0002_domain_schema.sql`,
-   `0003_add_mechanic_role.sql`, `0004_mechanic_permissions.sql`) — either
+3. Apply all six migrations, in order (`0001` through `0006`) — either
    paste them into the Supabase SQL Editor one at a time, or push them with
    the Supabase CLI:
 
@@ -155,11 +172,15 @@ supabase/
    anywhere else, so `0004` (which uses it) has to be a later migration,
    not appended to `0003`.
 
-   All four were applied and exercised against a real local Postgres 16
+   All six were applied and exercised against a real local Postgres 16
    during development — not just syntax-checked. That included rebuilding
    the RLS test harness to run as a real `authenticated`-role user rather
    than the Postgres superuser (which bypasses RLS and would have hidden
-   the recursion bug described under **Auth model** above).
+   the recursion bug described under **Auth model** above). The stock
+   take RLS policies (0006) were specifically tested for the awkward
+   cases: a mechanic starting or completing a take (must fail), a
+   mechanic recording a count attributed to someone else (must fail),
+   and recording/correcting a count after completion (must fail).
 
 4. In Supabase Auth settings, disable public sign-ups (Authentication →
    Providers → Email → disable "Allow new users to sign up") — staff
@@ -241,11 +262,14 @@ Built from the first batch of user stories:
 
 - **`suppliers`** — name, contact info.
 - **`stock_items`** — shared attributes for both parts and tyres
-  (ID number, barcode, name, supplier, cost/selling price,
-  non-returnable flag, `is_consignment` flag, quantity on hand, ideal
-  stock level, location). "Blank Circles" style stock — tyres loaned from
-  a supplier until sold — is the `is_consignment` flag, not a special
-  supplier; any supplier can supply consignment or owned stock.
+  (ID number, name, supplier, cost/selling price, non-returnable flag,
+  `is_consignment` flag, quantity on hand, ideal stock level, location).
+  "Blank Circles" style stock — tyres loaned from a supplier until sold —
+  is the `is_consignment` flag, not a special supplier; any supplier can
+  supply consignment or owned stock. `id_number` is both the garage's own
+  stock ID and what gets scanned as a barcode — migration 0005 dropped a
+  separate `barcode` column once it was confirmed the two were always the
+  same value.
 - **`part_details`** / **`tyre_details`** — 1:1 type-specific attributes
   (vehicle make/model for parts; width/profile/rim/speed/XL/commercial/
   season/tier for tyres, with a generated `size_label` like `205/55R16`).
@@ -268,19 +292,25 @@ Built from the first batch of user stories:
   quantity to order), `v_purchase_costs_weekly` and
   `v_supplier_return_credits_weekly` (for the weekly/monthly cost
   planning story).
+- **`stock_takes`** / **`stock_take_counts`** (0006) — stocktake
+  sessions. See **Stock takes** below.
 
 ## What's built vs. still open
 
 Built: auth (with a distinct `mechanic` role, see **Auth model**), the
-full domain schema above, and two screen slices:
+full domain schema above, and three screen slices:
 
 - `/dashboard/stock` (search/filter by ID/barcode/name, type, supplier,
-  vehicle make/model, tyre size/season/tier/commercial), `/dashboard/stock/new`
-  (add a part or tyre with an opening balance, admin/manager only), and
-  `/dashboard/stock/[id]` (detail view, record usage against a job number
-  for any staff, manual adjustments for admin/manager only). Cost/sell
-  price and the add/adjust actions are hidden from mechanics in the UI,
-  backed by the RLS policies described under **Auth model**.
+  vehicle make/model, tyre size/season/tier/commercial — the ID/barcode
+  field can be scanned with a phone camera as well as typed, see **Stock
+  ID / barcode scanning**), `/dashboard/stock/new` (add a part or tyre
+  with an opening balance, admin/manager only), and `/dashboard/stock/[id]`
+  (detail view, record usage against a job number for any staff, manual
+  adjustments for admin/manager only). Cost/sell price and the add/adjust
+  actions are hidden from mechanics in the UI, backed by the RLS policies
+  described under **Auth model**.
+- `/dashboard/stock-takes` — stocktake sessions. See **Stock takes**
+  below.
 - `/dashboard/vehicles` — search by registration. Shows the vehicle,
   lubricant specs and fitments already on file if there's a match;
   otherwise, if the DVSA MOT History API is configured (see **Vehicle
@@ -300,10 +330,64 @@ Not built yet — next slices, roughly in story order:
   bare-bones model row from a lookup, but there's no screen yet for
   filling in the rest, or for a model that has more than one generation
   on file.
-- Barcode scanning in the UI — a USB/Bluetooth scanner needs no special
-  handling (it types into the focused search/ID field like a keyboard),
-  but camera-based scanning on a phone/tablet needs a small JS library
-  (e.g. `@zxing/browser`) — not wired up yet.
+- **Applying a stock take's counts to actual stock levels.** Right now a
+  stock take only produces a report — it deliberately does not touch
+  `quantity_on_hand` or write `stock_movements`. Flagged to Joanne as an
+  open question below; wiring it up (as an `adjustment` movement per
+  discrepancy, admin/manager only, on completion or per-line) would be a
+  small follow-up once confirmed that's wanted.
+
+## Stock ID / barcode scanning
+
+`src/components/scan/scannable-id-input.tsx` is a drop-in replacement
+for a plain text input, used everywhere the stock ID/barcode field
+appears (stock search, add-stock-item, stock take counting). It always
+shows a "Scan" button; clicking it opens the device camera (rear camera
+preferred, via `facingMode: "environment"`) and decodes a barcode with
+`@zxing/browser`, filling the field automatically. Manual typing works
+everywhere the button does, and on a desktop/laptop without a camera the
+button just shows a clear error instead of a live feed rather than being
+hidden — hiding it would need detecting camera support before the first
+render, which isn't available during server rendering and would cause a
+hydration mismatch.
+
+## Stock takes
+
+`/dashboard/stock-takes` — the story: "a quick scan of barcode or ID
+number and enter QTY", producing a discrepancy report at the end.
+
+- **Starting one** (admin/manager only) creates a `stock_takes` row with
+  `status = 'in_progress'`.
+- **Counting** (any signed-in staff member) scans or types a stock ID and
+  enters the quantity found. This upserts one `stock_take_counts` row per
+  item — scanning the same item again corrects the existing count rather
+  than adding a duplicate. `expected_quantity` is captured from
+  `stock_items.quantity_on_hand` at the moment of counting, not
+  recomputed later, so the report doesn't quietly drift if stock keeps
+  moving (mechanics still logging parts used) while the count is under
+  way.
+- **The report**, live on the same page while in progress or fixed once
+  completed, has two tables: everything counted (expected vs. counted vs.
+  difference), and every active stock item that was never scanned this
+  session. The same mechanism serves a full stocktake (scan everything —
+  "not yet counted" ends up empty) and a partial one (scan a subset —
+  "not yet counted" just lists what's left).
+- **Completing one** (admin/manager only) sets `status = 'completed'`,
+  after which no more counts can be recorded against it (enforced by RLS,
+  not just the UI).
+- **Tracked**: every stock take is a real row, listed at
+  `/dashboard/stock-takes`, so past counts and their reports stay
+  available — nothing here is a one-off, throwaway computation.
+- **Print / PDF**: the report page has a Print button
+  (`window.print()`) and a Download PDF link
+  (`/api/stock-takes/[id]/pdf`, generated server-side with `pdfkit` —
+  chosen over a headless-browser approach like Puppeteer because it has
+  no Chromium dependency to fight with on Vercel's serverless functions).
+  The site's nav header and the scan/complete controls are hidden when
+  printing (`print:hidden`) so what prints is just the report.
+- **Does not touch stock levels.** This intentionally only produces a
+  report — it doesn't write `stock_movements` or change
+  `quantity_on_hand`. See **What's built vs. still open** above.
 
 ## Vehicle reg/VIN lookup
 
@@ -344,3 +428,13 @@ configured" message for anything not already on file.
 - **Single site/location** — `quantity_on_hand` and `ideal_stock_level`
   are per stock item, not per-location. Flag if a second site is ever on
   the cards. (Confirmed with Joanne: no second site for now.)
+- **Should completing a stock take update stock levels?** Right now a
+  stock take only reports discrepancies — it never touches
+  `quantity_on_hand`. That matches what was asked for ("a report...
+  produced... stock discrepancy"), but a real stocktake's usual next step
+  is correcting the system to match what was physically counted. Say if
+  you want that wired in (it would write an `adjustment` stock_movement
+  per discrepancy, admin/manager only, matching the existing "Adjust
+  stock" permission model) — currently that reconciliation has to be done
+  by hand, item by item, using the existing adjustment screen on each
+  stock item's detail page.

@@ -71,9 +71,7 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
       }
       if (searchParams.q) {
         const q = searchParams.q.replace(/[%,]/g, "")
-        query = query.or(
-          `id_number.ilike.%${q}%,barcode.ilike.%${q}%,name.ilike.%${q}%`
-        )
+        query = query.or(`id_number.ilike.%${q}%,name.ilike.%${q}%`)
       }
       return query
     })(),

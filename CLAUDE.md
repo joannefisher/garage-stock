@@ -53,24 +53,46 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
 - Domain schema is in `supabase/migrations/0002_domain_schema.sql`
   (suppliers, stock_items + part_details/tyre_details, an append-only
   stock_movements ledger, purchase_orders/lines, supplier_returns/lines,
-  vehicle_models/vehicles/lubricants/fitments, and reporting views). See
-  the README's "Domain schema" and "Open questions" sections for the
-  reasoning and the assumptions flagged to Joanne (single site/location,
-  manual reg/VIN entry for now, mechanic→staff role mapping). Both
-  migrations were applied and exercised against a real local Postgres 16
-  during development, not just syntax-checked.
-- Two UI slices are built: `/dashboard/stock` (search/filter — cost/sell
+  vehicle_models/vehicles/lubricants/fitments, and reporting views), plus
+  `0005_merge_id_and_barcode.sql` (dropped `stock_items.barcode` — ID
+  number and barcode are the same field now, don't reintroduce a separate
+  barcode column) and `0006_stock_takes.sql` (stock_takes /
+  stock_take_counts). See the README's "Domain schema", "Stock takes" and
+  "Open questions" sections for the reasoning and the assumptions flagged
+  to Joanne (single site/location, manual reg/VIN entry for now, whether
+  completing a stock take should also reconcile stock levels — currently
+  it doesn't). All migrations were applied and exercised against a real
+  local Postgres 16 during development, not just syntax-checked.
+- Three UI slices are built: `/dashboard/stock` (search/filter — cost/sell
   price and admin-only actions hidden from mechanics), `/dashboard/stock/new`
   (add item, admin/manager only), `/dashboard/stock/[id]` (detail, record
-  usage — any staff — and adjustments — admin/manager only), and
+  usage — any staff — and adjustments — admin/manager only);
+  `/dashboard/stock-takes` (scan-and-count stocktake sessions, tracked,
+  printable, PDF-downloadable — see README's "Stock takes"); and
   `/dashboard/vehicles` (registration search against the vehicle file,
   falling back to a DVSA MOT History API lookup — see
   `src/lib/vehicle-lookup/dvsa-mot-history.ts` for an important accuracy
   caveat on that integration, it hasn't been tested against live DVSA
   credentials). Purchase orders, supplier returns, the reorder/cost report
-  views, editing vehicle model/lubricant/fitment data, and barcode camera
-  scanning have schema/views but no screens yet — see README's "What's
-  built vs. still open" before assuming something exists.
+  views, editing vehicle model/lubricant/fitment data, and applying a
+  stock take's counts to actual stock levels have schema/views but no
+  screens/wiring yet — see README's "What's built vs. still open" before
+  assuming something exists.
+- Camera barcode scanning is wired up:
+  `src/components/scan/scannable-id-input.tsx` (uses `@zxing/browser`,
+  dynamically imported so it's not in every page's initial bundle), used
+  for the ID/barcode field in stock search, add-stock-item, and stock
+  take counting. Always renders the Scan button rather than
+  feature-detecting camera support first — that needs `navigator`, which
+  causes a server/client hydration mismatch if used to conditionally
+  render. See the comment at the top of that file before changing it.
+- PDF export (`src/app/api/stock-takes/[id]/pdf/route.ts`) uses `pdfkit`,
+  not a headless-browser/Puppeteer approach — deliberate, to avoid
+  fighting Chromium-on-serverless issues on Vercel. Needs
+  `export const runtime = "nodejs"` (pdfkit reads font metrics from disk,
+  incompatible with Edge). Verified pdfkit itself produces a valid PDF in
+  this sandbox's Node version; the route wasn't tested against a live
+  Supabase project (none linked here).
 - Stock list/detail queries filter on stock catalogue size assumptions:
   type-specific search filters (vehicle make/model, tyre size/season/
   tier/commercial) are applied in-memory in `src/app/dashboard/stock/

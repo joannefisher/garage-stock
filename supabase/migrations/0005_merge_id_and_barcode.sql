@@ -1,0 +1,13 @@
+-- 0005_merge_id_and_barcode.sql
+-- Per Joanne: "ID & Barcode are the same thing" — the garage doesn't
+-- track a separate scannable barcode distinct from its own internal
+-- stock ID number, so there's no reason to store both. `id_number` was
+-- already the required, unique, primary identifier; `barcode` was an
+-- optional second one. Dropping `barcode` and treating `id_number` as
+-- the single field that's both typed in and scanned.
+--
+-- This is a genuine schema simplification, not just a rename — if any
+-- stock item had a `barcode` value that differs from its `id_number`,
+-- that value is lost. Pre-production database, so treated as acceptable
+-- here; flag if real stock data with divergent barcodes already exists.
+alter table public.stock_items drop column barcode;

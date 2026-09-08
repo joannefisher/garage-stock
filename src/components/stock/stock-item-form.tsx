@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ScannableIdInput } from "@/components/scan/scannable-id-input"
 
 interface SupplierOption {
   id: string
@@ -63,12 +64,8 @@ export function StockItemForm({
         <legend className="px-1 text-sm font-medium">Core details</legend>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="id_number">ID number *</Label>
-          <Input id="id_number" name="id_number" required />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="barcode">Barcode</Label>
-          <Input id="barcode" name="barcode" />
+          <Label htmlFor="id_number">ID / barcode *</Label>
+          <ScannableIdInput id="id_number" name="id_number" required />
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
           <Label htmlFor="name">Name *</Label>

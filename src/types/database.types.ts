@@ -1,6 +1,5 @@
 /**
- * Hand-written types matching supabase/migrations/0001_init.sql and
- * 0002_domain_schema.sql.
+ * Hand-written types matching supabase/migrations/0001-0006.
  *
  * Once your Supabase project is linked, regenerate the real (guaranteed
  * accurate) types and replace this file entirely:
@@ -40,6 +39,7 @@ export type PurchaseOrderStatus =
   | "received"
   | "cancelled"
 export type SupplierReturnStatus = "draft" | "sent" | "credited"
+export type StockTakeStatus = "in_progress" | "completed"
 
 // ---------------------------------------------------------------------
 // profiles (0001_init.sql)
@@ -96,8 +96,10 @@ export type SupplierUpdate = Partial<SupplierInsert>
 export type StockItemRow = {
   id: string
   item_type: StockItemType
+  // Also what's scanned as a barcode — "ID & Barcode are the same
+  // thing" (Joanne). Migration 0005 dropped the separate `barcode`
+  // column; this is the single field for both.
   id_number: string
-  barcode: string | null
   name: string
   supplier_id: string | null
   cost_price: number
@@ -117,7 +119,6 @@ export type StockItemInsert = {
   id?: string
   item_type: StockItemType
   id_number: string
-  barcode?: string | null
   name: string
   supplier_id?: string | null
   cost_price?: number
@@ -314,6 +315,56 @@ export type SupplierReturnLineInsert = {
 export type SupplierReturnLineUpdate = Partial<SupplierReturnLineInsert>
 
 // ---------------------------------------------------------------------
+// stock_takes / stock_take_counts (0006_stock_takes.sql)
+// ---------------------------------------------------------------------
+
+export type StockTakeRow = {
+  id: string
+  status: StockTakeStatus
+  started_by: string | null
+  started_at: string
+  completed_by: string | null
+  completed_at: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+export type StockTakeInsert = {
+  id?: string
+  status?: StockTakeStatus
+  started_by?: string | null
+  started_at?: string
+  completed_by?: string | null
+  completed_at?: string | null
+  notes?: string | null
+  created_at?: string
+  updated_at?: string
+}
+export type StockTakeUpdate = Partial<StockTakeInsert>
+
+export type StockTakeCountRow = {
+  id: string
+  stock_take_id: string
+  stock_item_id: string
+  counted_quantity: number
+  expected_quantity: number
+  counted_by: string | null
+  counted_at: string
+  notes: string | null
+}
+export type StockTakeCountInsert = {
+  id?: string
+  stock_take_id: string
+  stock_item_id: string
+  counted_quantity: number
+  expected_quantity: number
+  counted_by?: string | null
+  counted_at?: string
+  notes?: string | null
+}
+export type StockTakeCountUpdate = Partial<StockTakeCountInsert>
+
+// ---------------------------------------------------------------------
 // vehicle_models / vehicles / lubricants / fitments
 // ---------------------------------------------------------------------
 
@@ -506,6 +557,18 @@ export type Database = {
         Update: SupplierReturnLineUpdate
         Relationships: []
       }
+      stock_takes: {
+        Row: StockTakeRow
+        Insert: StockTakeInsert
+        Update: StockTakeUpdate
+        Relationships: []
+      }
+      stock_take_counts: {
+        Row: StockTakeCountRow
+        Insert: StockTakeCountInsert
+        Update: StockTakeCountUpdate
+        Relationships: []
+      }
       vehicle_models: {
         Row: VehicleModelRow
         Insert: VehicleModelInsert
@@ -548,6 +611,7 @@ export type Database = {
       stock_movement_type: StockMovementType
       purchase_order_status: PurchaseOrderStatus
       supplier_return_status: SupplierReturnStatus
+      stock_take_status: StockTakeStatus
     }
   }
 }

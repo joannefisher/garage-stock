@@ -6,6 +6,7 @@ import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ScannableIdInput } from "@/components/scan/scannable-id-input"
 
 interface SupplierOption {
   id: string
@@ -39,10 +40,10 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="q">Search</Label>
-          <Input
+          <ScannableIdInput
             id="q"
             name="q"
-            placeholder="ID number, barcode or name"
+            placeholder="ID / barcode or name"
             defaultValue={searchParams.get("q") ?? ""}
           />
         </div>

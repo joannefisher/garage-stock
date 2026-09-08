@@ -54,7 +54,6 @@ export async function createStockItem(formData: FormData) {
     .insert({
       item_type: itemType,
       id_number: str(formData, "id_number"),
-      barcode: optionalStr(formData, "barcode"),
       name: str(formData, "name"),
       supplier_id: optionalStr(formData, "supplier_id"),
       cost_price: num(formData, "cost_price"),

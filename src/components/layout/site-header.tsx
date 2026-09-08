@@ -8,6 +8,7 @@ import { logout } from "@/app/login/actions"
 const NAV_LINKS = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/stock", label: "Stock" },
+  { href: "/dashboard/stock-takes", label: "Stock takes" },
   { href: "/dashboard/vehicles", label: "Vehicles" },
 ] as const
 
@@ -17,7 +18,7 @@ export async function SiteHeader() {
   const role = staff?.role ?? null
 
   return (
-    <header className="border-b bg-background">
+    <header className="border-b bg-background print:hidden">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
         <div className="flex items-center gap-6">
           <Link href="/dashboard" className="font-semibold">

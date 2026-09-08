@@ -45,10 +45,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
         {stockItem.is_consignment && <Badge variant="outline">consignment</Badge>}
         {stockItem.is_non_returnable && <Badge variant="outline">non-returnable</Badge>}
       </div>
-      <p className="text-muted-foreground">
-        {stockItem.id_number}
-        {stockItem.barcode ? ` · barcode ${stockItem.barcode}` : ""}
-      </p>
+      <p className="text-muted-foreground">{stockItem.id_number}</p>
 
       {error && (
         <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
