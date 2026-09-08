@@ -3,9 +3,10 @@
 A private, single-company stock management system for a car garage —
 parts and tyres. Not for public/multi-tenant use.
 
-This repo is the **base scaffold**: project structure, auth and the app
-shell are wired up. Domain features (parts, tyres, stock levels,
-suppliers, stock movements, etc.) will be built out from user stories.
+Auth, the domain schema (parts, tyres, suppliers, orders, returns,
+vehicle/fitment lookup) and a first stock search/add/use screen are built
+from the first batch of user stories. See **Status** at the bottom for
+what's built vs. still open.
 
 ## Tech stack
 
@@ -29,9 +30,18 @@ suppliers, stock movements, etc.) will be built out from user stories.
   — extend the `staff_role` enum once real roles are confirmed).
 - `src/proxy.ts` redirects signed-out visitors to `/login` and refreshes
   the Supabase session cookie on every request.
-- Row Level Security is enabled on every table from the start. Admins can
-  manage all profiles/roles; everyone else can read profiles and edit
-  only their own.
+- Row Level Security is enabled on every table from the start. Only
+  `admin` can change roles/manage other staff profiles (0001_init.sql);
+  both `admin` and `manager` can manage the stock catalogue, suppliers,
+  orders, returns and vehicle data (0002_domain_schema.sql). Any
+  authenticated staff member can record a `stock_movements` row (that's
+  how a mechanic logs using a part against a job) but not edit/delete one
+  — it's an append-only ledger.
+- The user stories talk about "admin" and "mechanic" users. There's no
+  separate `mechanic` role value — a mechanic is just a `staff` profile
+  (the same role a non-admin, non-manager account gets by default).
+  Rename/extend `staff_role` in a new migration if you want that split
+  named explicitly.
 
 New staff accounts are created via the Supabase dashboard (Authentication
 → Users → Invite/Add user) or a small admin script using the service role
@@ -43,22 +53,34 @@ key — there's no public sign-up page, by design.
 src/
   app/
     login/            Sign-in page + server actions (login/logout)
-    dashboard/         Protected app shell (header, nav) — build features here
+    dashboard/
+      stock/            Stock search/list + filters (story: admin search)
+        new/             Add a part or tyre (story: collect stock data)
+        [id]/            Item detail, record usage (mechanic), adjustments
+      page.tsx           Dashboard placeholder
     page.tsx            Redirects to /dashboard or /login
   components/
     ui/                 shadcn/ui primitives (button, input, card, ...)
     layout/             Site header/nav
+    stock/              Stock filters + the add-item form
   lib/
     supabase/
       client.ts         Supabase client for Client Components
       server.ts          Supabase client for Server Components/Actions
       proxy.ts            Session refresh + route protection (used by src/proxy.ts)
+    stock/types.ts       Shared TS types for stock list/search queries
     utils.ts             cn() class-merging helper
   types/
-    database.types.ts    Placeholder — replace with generated Supabase types
+    database.types.ts    Hand-written types matching the migrations below —
+                          replace with generated Supabase types once linked
   proxy.ts                Next.js 16 proxy (formerly middleware) entry point
 supabase/
-  migrations/             SQL migrations, applied via the Supabase CLI or dashboard
+  migrations/
+    0001_init.sql          Auth: profiles table, roles, RLS
+    0002_domain_schema.sql Domain: suppliers, stock_items (parts/tyres),
+                            stock_movements ledger, purchase orders,
+                            supplier returns, vehicles/fitment/lubricants,
+                            reorder + cost reporting views
 ```
 
 ## Getting started
@@ -77,14 +99,20 @@ supabase/
    cp .env.local.example .env.local
    ```
 
-3. Apply the base migration (`supabase/migrations/0001_init.sql`) either by
-   pasting it into the Supabase SQL Editor, or via the Supabase CLI:
+3. Apply both migrations, in order (`0001_init.sql` then
+   `0002_domain_schema.sql`) — either paste them into the Supabase SQL
+   Editor one at a time, or push them with the Supabase CLI:
 
    ```bash
    npx supabase login
    npx supabase link --project-ref <your-project-ref>
    npx supabase db push
    ```
+
+   Both migrations were applied and exercised against a real local
+   Postgres 16 during development (opening balances, using stock against
+   a job, the reorder-report view, the sign-check constraint on
+   `stock_movements`) — they're not just syntax-checked.
 
 4. In Supabase Auth settings, disable public sign-ups (Authentication →
    Providers → Email → disable "Allow new users to sign up") — staff
@@ -107,8 +135,9 @@ supabase/
    Open [http://localhost:3000](http://localhost:3000) — you'll be
    redirected to `/login`.
 
-7. Once your Supabase schema settles, regenerate real types to replace the
-   placeholder in `src/types/database.types.ts`:
+7. Once your Supabase project is linked, regenerate real types to replace
+   the hand-written ones in `src/types/database.types.ts` (keep them in
+   sync by hand until then — see the comment at the top of that file):
 
    ```bash
    npx supabase gen types typescript --project-id <your-project-ref> > src/types/database.types.ts
@@ -135,8 +164,74 @@ npx shadcn@latest add dialog
 - **Database:** Supabase is already hosted — no separate deploy step.
   Apply new migrations with `npx supabase db push` as the schema grows.
 
-## Status
+## Domain schema (`0002_domain_schema.sql`)
 
-Base scaffold only — no domain (parts/tyres/stock) features yet. Next
-step: turn the user stories into a schema and screens under
-`src/app/dashboard/`.
+Built from the first batch of user stories:
+
+- **`suppliers`** — name, contact info.
+- **`stock_items`** — shared attributes for both parts and tyres
+  (ID number, barcode, name, supplier, cost/selling price,
+  non-returnable flag, `is_consignment` flag, quantity on hand, ideal
+  stock level, location). "Blank Circles" style stock — tyres loaned from
+  a supplier until sold — is the `is_consignment` flag, not a special
+  supplier; any supplier can supply consignment or owned stock.
+- **`part_details`** / **`tyre_details`** — 1:1 type-specific attributes
+  (vehicle make/model for parts; width/profile/rim/speed/XL/commercial/
+  season/tier for tyres, with a generated `size_label` like `205/55R16`).
+- **`stock_movements`** — an append-only ledger (`initial`, `goods_in`,
+  `used`, `return_to_supplier`, `adjustment`). `quantity_on_hand` on
+  `stock_items` is kept in sync by a trigger, not edited directly. A
+  mechanic "removing a stock item" is a `used` movement with a
+  `job_number`.
+- **`purchase_orders`** / **`purchase_order_lines`** — parts/tyres on
+  order; "accepting into stock" records a `goods_in` movement.
+- **`supplier_returns`** / **`supplier_return_lines`** — returns to
+  supplier, each recording a `return_to_supplier` movement.
+- **`vehicle_models`**, **`vehicles`**, **`vehicle_model_lubricants`**,
+  **`vehicle_model_fitments`** — reg/VIN search. Fitment and lubricant
+  specs are attached to a vehicle *model* (make/model/generation/engine),
+  not an individual reg/VIN, so the data covers every car of that model.
+  `vehicles` just maps a specific reg/VIN to a model — currently manual
+  entry only (see **Open questions** below).
+- **Views:** `v_reorder_report` (items below their ideal stock level, with
+  quantity to order), `v_purchase_costs_weekly` and
+  `v_supplier_return_credits_weekly` (for the weekly/monthly cost
+  planning story).
+
+## What's built vs. still open
+
+Built: auth, the full domain schema above, and one screen slice —
+`/dashboard/stock` (search/filter by ID/barcode/name, type, supplier,
+vehicle make/model, tyre size/season/tier/commercial), `/dashboard/stock/new`
+(add a part or tyre with an opening balance), and `/dashboard/stock/[id]`
+(detail view, record usage against a job number, manual adjustments).
+
+Not built yet — next slices, roughly in story order:
+
+- Purchase orders: create/edit, and "accept into stock" (receive against
+  a PO line).
+- Supplier returns: create/process a return.
+- Reports UI for `v_reorder_report` and the weekly cost views (the SQL
+  views exist; there's no page rendering them yet).
+- Vehicle reg/VIN search screen, and maintaining `vehicle_models` /
+  fitment / lubricant data.
+- Barcode scanning in the UI — a USB/Bluetooth scanner needs no special
+  handling (it types into the focused search/ID field like a keyboard),
+  but camera-based scanning on a phone/tablet needs a small JS library
+  (e.g. `@zxing/browser`) — not wired up yet.
+- Hiding admin-only actions (add/edit stock, orders, returns) in the UI
+  for `staff`-role accounts — RLS already blocks the writes at the
+  database level, but the buttons aren't conditionally hidden yet.
+
+## Open questions / assumptions to confirm
+
+- **Single site/location** — `quantity_on_hand` and `ideal_stock_level`
+  are per stock item, not per-location. Flag if a second site is ever on
+  the cards.
+- **Reg/VIN → vehicle data source** — left as manual entry for now (no
+  DVLA/VIN-decode API wired up). The schema is structured so that can be
+  added later (an API lookup would just populate `vehicles` and, ideally,
+  `vehicle_models`) without restructuring fitment/lubricant data.
+- **"Mechanic" role** — mapped to the existing `staff` role rather than
+  adding a new role value. Say if mechanics need permissions distinct
+  from other non-admin staff.
