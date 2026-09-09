@@ -9,7 +9,12 @@ import { ScannableIdInput } from "@/components/scan/scannable-id-input"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { getStockTakeReport } from "@/lib/stock-takes/report"
 
-import { completeStockTake, recordCount } from "../actions"
+import {
+  applyAllStockTakeDiscrepancies,
+  applyStockTakeCount,
+  completeStockTake,
+  recordCount,
+} from "../actions"
 import { PrintButton } from "./print-button"
 
 type StockTakeDetailSearchParams = { error?: string; value?: string }
@@ -28,7 +33,9 @@ export default async function StockTakeDetailPage(
 
   const { stockTake, counted, missing } = report
   const inProgress = stockTake.status === "in_progress"
-  const discrepancyCount = counted.filter((c) => c.difference !== 0).length
+  const discrepancies = counted.filter((c) => c.difference !== 0)
+  const discrepancyCount = discrepancies.length
+  const outstandingDiscrepancies = discrepancies.filter((c) => !c.reconciled_at)
 
   return (
     <div className="flex flex-col gap-4">
@@ -118,6 +125,29 @@ export default async function StockTakeDetailPage(
         <SummaryStat label="Not yet counted" value={missing.length} />
       </div>
 
+      {canManageStock && outstandingDiscrepancies.length > 0 && (
+        <Card className="print:hidden border-destructive/40">
+          <CardHeader>
+            <CardTitle>
+              {outstandingDiscrepancies.length} discrepanc
+              {outstandingDiscrepancies.length === 1 ? "y" : "ies"} not yet applied to stock
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Update stock levels to match what was actually counted, item by item below, or all
+              at once.
+            </p>
+            <form action={applyAllStockTakeDiscrepancies}>
+              <input type="hidden" name="stock_take_id" value={stockTake.id} />
+              <Button type="submit" variant="destructive">
+                Update all ({outstandingDiscrepancies.length})
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Counted ({counted.length})</CardTitle>
@@ -132,6 +162,7 @@ export default async function StockTakeDetailPage(
                 <th className="px-2 py-1.5 text-right font-medium">Counted</th>
                 <th className="px-2 py-1.5 text-right font-medium">Difference</th>
                 <th className="px-2 py-1.5 font-medium">Counted by</th>
+                {canManageStock && <th className="px-2 py-1.5 font-medium print:hidden">Stock level</th>}
               </tr>
             </thead>
             <tbody>
@@ -151,11 +182,32 @@ export default async function StockTakeDetailPage(
                   <td className="px-2 py-1.5 text-muted-foreground">
                     {c.counted_by_name ?? "—"}
                   </td>
+                  {canManageStock && (
+                    <td className="px-2 py-1.5 print:hidden">
+                      {c.difference === 0 ? (
+                        <span className="text-xs text-muted-foreground">Matched</span>
+                      ) : c.reconciled_at ? (
+                        <Badge variant="secondary">Updated</Badge>
+                      ) : (
+                        <form action={applyStockTakeCount}>
+                          <input type="hidden" name="stock_take_id" value={stockTake.id} />
+                          <input
+                            type="hidden"
+                            name="stock_take_count_id"
+                            value={c.stock_take_count_id}
+                          />
+                          <Button type="submit" size="sm" variant="outline">
+                            Update stock level
+                          </Button>
+                        </form>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {counted.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">
+                  <td colSpan={canManageStock ? 7 : 6} className="px-2 py-6 text-center text-muted-foreground">
                     Nothing counted yet.
                   </td>
                 </tr>
@@ -170,6 +222,13 @@ export default async function StockTakeDetailPage(
           <CardTitle>Not yet counted ({missing.length})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
+          {missing.length > 0 && (
+            <p className="mb-3 text-sm text-muted-foreground print:hidden">
+              These weren&apos;t scanned, so there&apos;s no counted quantity to update stock to —
+              scan them to include them, or correct one by hand from its stock item page if you
+              already know the real figure.
+            </p>
+          )}
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-muted-foreground">

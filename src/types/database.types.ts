@@ -1,5 +1,5 @@
 /**
- * Hand-written types matching supabase/migrations/0001-0006.
+ * Hand-written types matching supabase/migrations/0001-0007.
  *
  * Once your Supabase project is linked, regenerate the real (guaranteed
  * accurate) types and replace this file entirely:
@@ -203,6 +203,11 @@ export type StockMovementRow = {
   job_number: string | null
   purchase_order_id: string | null
   supplier_return_id: string | null
+  // Set on 'adjustment' movements written by stock take reconciliation
+  // (0007_stock_take_reconciliation.sql) — traces the movement back to
+  // the stock take that produced it, same idea as purchase_order_id /
+  // supplier_return_id above.
+  stock_take_id: string | null
   performed_by: string | null
   notes: string | null
   created_at: string
@@ -215,6 +220,7 @@ export type StockMovementInsert = {
   job_number?: string | null
   purchase_order_id?: string | null
   supplier_return_id?: string | null
+  stock_take_id?: string | null
   performed_by?: string | null
   notes?: string | null
   created_at?: string
@@ -351,6 +357,13 @@ export type StockTakeCountRow = {
   counted_by: string | null
   counted_at: string
   notes: string | null
+  // Set once this discrepancy has been applied to actual stock levels
+  // (0007_stock_take_reconciliation.sql) — admin/manager only, see the
+  // trigger guard in that migration. reconciled_movement_id points at
+  // the stock_movements row it wrote, or stays null if the count matched
+  // (no adjustment needed, but still marked reconciled/reviewed).
+  reconciled_at: string | null
+  reconciled_movement_id: string | null
 }
 export type StockTakeCountInsert = {
   id?: string
@@ -361,6 +374,8 @@ export type StockTakeCountInsert = {
   counted_by?: string | null
   counted_at?: string
   notes?: string | null
+  reconciled_at?: string | null
+  reconciled_movement_id?: string | null
 }
 export type StockTakeCountUpdate = Partial<StockTakeCountInsert>
 

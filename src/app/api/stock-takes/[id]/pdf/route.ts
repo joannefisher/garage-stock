@@ -119,12 +119,13 @@ function buildPdf(
     drawTable(
       doc,
       [
-        { header: "ID", width: 90 },
-        { header: "Name", width: 170 },
-        { header: "Expected", width: 70, align: "right" },
-        { header: "Counted", width: 70, align: "right" },
-        { header: "Diff", width: 60, align: "right" },
-        { header: "Counted by", width: 95 },
+        { header: "ID", width: 80 },
+        { header: "Name", width: 140 },
+        { header: "Expected", width: 55, align: "right" },
+        { header: "Counted", width: 55, align: "right" },
+        { header: "Diff", width: 50, align: "right" },
+        { header: "Applied", width: 50 },
+        { header: "Counted by", width: 85 },
       ],
       counted.map((c) => [
         c.id_number,
@@ -132,6 +133,7 @@ function buildPdf(
         String(c.expected_quantity),
         String(c.counted_quantity),
         c.difference > 0 ? `+${c.difference}` : String(c.difference),
+        c.difference === 0 ? "—" : c.reconciled_at ? "Yes" : "No",
         c.counted_by_name ?? "—",
       ]),
       "Nothing counted yet."

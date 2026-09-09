@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import type { StockTakeRow } from "@/types/database.types"
 
 export type StockTakeCountLine = {
+  stock_take_count_id: string
   stock_item_id: string
   id_number: string
   name: string
@@ -10,6 +11,7 @@ export type StockTakeCountLine = {
   difference: number
   counted_at: string
   counted_by_name: string | null
+  reconciled_at: string | null
 }
 
 export type StockTakeMissingLine = {
@@ -34,10 +36,12 @@ export type StockTakeReport = {
 // live Supabase project here to verify PostgREST's embedded-resource
 // response shape against; these are cast with `as unknown as X`.
 type RawCountRow = {
+  id: string
   stock_item_id: string
   counted_quantity: number
   expected_quantity: number
   counted_at: string
+  reconciled_at: string | null
   stock_items: { id_number: string; name: string } | null
   counted_by_profile: { full_name: string } | null
 }
@@ -82,7 +86,7 @@ export async function getStockTakeReport(id: string): Promise<StockTakeReport | 
     supabase
       .from("stock_take_counts")
       .select(
-        "stock_item_id, counted_quantity, expected_quantity, counted_at, stock_items(id_number, name), counted_by_profile:profiles(full_name)"
+        "id, stock_item_id, counted_quantity, expected_quantity, counted_at, reconciled_at, stock_items(id_number, name), counted_by_profile:profiles(full_name)"
       )
       .eq("stock_take_id", id),
     supabase
@@ -96,6 +100,7 @@ export async function getStockTakeReport(id: string): Promise<StockTakeReport | 
 
   const counted: StockTakeCountLine[] = counts
     .map((c) => ({
+      stock_take_count_id: c.id,
       stock_item_id: c.stock_item_id,
       id_number: c.stock_items?.id_number ?? "—",
       name: c.stock_items?.name ?? "—",
@@ -104,6 +109,7 @@ export async function getStockTakeReport(id: string): Promise<StockTakeReport | 
       difference: c.counted_quantity - c.expected_quantity,
       counted_at: c.counted_at,
       counted_by_name: c.counted_by_profile?.full_name ?? null,
+      reconciled_at: c.reconciled_at,
     }))
     .sort((a, b) => a.id_number.localeCompare(b.id_number))
 

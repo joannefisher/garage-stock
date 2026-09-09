@@ -56,28 +56,45 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
   vehicle_models/vehicles/lubricants/fitments, and reporting views), plus
   `0005_merge_id_and_barcode.sql` (dropped `stock_items.barcode` — ID
   number and barcode are the same field now, don't reintroduce a separate
-  barcode column) and `0006_stock_takes.sql` (stock_takes /
-  stock_take_counts). See the README's "Domain schema", "Stock takes" and
+  barcode column), `0006_stock_takes.sql` (stock_takes /
+  stock_take_counts), and `0007_stock_take_reconciliation.sql` (applies a
+  stock take's counts to actual stock levels — `reconciled_at` /
+  `reconciled_movement_id` on stock_take_counts, `stock_take_id` on
+  stock_movements). See the README's "Domain schema", "Stock takes" and
   "Open questions" sections for the reasoning and the assumptions flagged
-  to Joanne (single site/location, manual reg/VIN entry for now, whether
-  completing a stock take should also reconcile stock levels — currently
-  it doesn't). All migrations were applied and exercised against a real
-  local Postgres 16 during development, not just syntax-checked.
-- Three UI slices are built: `/dashboard/stock` (search/filter — cost/sell
+  to Joanne (single site/location, manual reg/VIN entry for now). All
+  migrations were applied and exercised against a real local Postgres 16
+  during development, not just syntax-checked.
+- **RLS gotcha #2, hit once in 0007 — RLS is row-level, not
+  column-level.** A policy that lets a user update "their own" row (e.g.
+  "Staff can correct in-progress stock take counts", keyed on
+  `counted_by = auth.uid()`) grants them every column on that row, not
+  just the one the policy was written for — there's no way to say "this
+  column, but not that one" in a `USING`/`WITH CHECK` clause alone, and
+  `WITH CHECK` can't compare against the pre-update value either (no
+  `OLD` reference). Caught by testing against real Postgres as the
+  `authenticated` role (not the superuser): a mechanic could set
+  `stock_take_counts.reconciled_at` on their own in-progress count, which
+  is supposed to be admin/manager-only. Fixed with a `BEFORE UPDATE`
+  trigger (`guard_stock_take_count_reconciliation` in 0007) that compares
+  `OLD`/`NEW` and rejects the change outright for non-admin/manager —
+  reach for a trigger, not a cleverer policy, next time this shape of
+  restriction comes up.
+- Four UI slices are built: `/dashboard/stock` (search/filter — cost/sell
   price and admin-only actions hidden from mechanics), `/dashboard/stock/new`
   (add item, admin/manager only), `/dashboard/stock/[id]` (detail, record
   usage — any staff — and adjustments — admin/manager only);
   `/dashboard/stock-takes` (scan-and-count stocktake sessions, tracked,
-  printable, PDF-downloadable — see README's "Stock takes"); and
+  printable, PDF-downloadable, with per-item or bulk reconciliation to
+  actual stock levels — see README's "Stock takes"); and
   `/dashboard/vehicles` (registration search against the vehicle file,
   falling back to a DVSA MOT History API lookup — see
   `src/lib/vehicle-lookup/dvsa-mot-history.ts` for an important accuracy
   caveat on that integration, it hasn't been tested against live DVSA
   credentials). Purchase orders, supplier returns, the reorder/cost report
-  views, editing vehicle model/lubricant/fitment data, and applying a
-  stock take's counts to actual stock levels have schema/views but no
-  screens/wiring yet — see README's "What's built vs. still open" before
-  assuming something exists.
+  views, and editing vehicle model/lubricant/fitment data have schema/
+  views but no screens/wiring yet — see README's "What's built vs. still
+  open" before assuming something exists.
 - Camera barcode scanning is wired up:
   `src/components/scan/scannable-id-input.tsx` (uses `@zxing/browser`,
   dynamically imported so it's not in every page's initial bundle), used

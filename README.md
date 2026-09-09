@@ -138,6 +138,11 @@ supabase/
     0006_stock_takes.sql   Stock take sessions + per-item counts, with RLS
                             (any staff can count while in progress; starting/
                             completing is admin/manager only)
+    0007_stock_take_reconciliation.sql  Applies a stock take's counts to
+                            actual stock levels: reconciled_at/
+                            reconciled_movement_id on stock_take_counts,
+                            stock_take_id on stock_movements, admin/manager
+                            only (RLS policy + trigger guard)
 ```
 
 ## Getting started
@@ -156,7 +161,7 @@ supabase/
    cp .env.local.example .env.local
    ```
 
-3. Apply all six migrations, in order (`0001` through `0006`) — either
+3. Apply all seven migrations, in order (`0001` through `0007`) — either
    paste them into the Supabase SQL Editor one at a time, or push them with
    the Supabase CLI:
 
@@ -172,7 +177,7 @@ supabase/
    anywhere else, so `0004` (which uses it) has to be a later migration,
    not appended to `0003`.
 
-   All six were applied and exercised against a real local Postgres 16
+   All seven were applied and exercised against a real local Postgres 16
    during development — not just syntax-checked. That included rebuilding
    the RLS test harness to run as a real `authenticated`-role user rather
    than the Postgres superuser (which bypasses RLS and would have hidden
@@ -180,7 +185,13 @@ supabase/
    take RLS policies (0006) were specifically tested for the awkward
    cases: a mechanic starting or completing a take (must fail), a
    mechanic recording a count attributed to someone else (must fail),
-   and recording/correcting a count after completion (must fail).
+   and recording/correcting a count after completion (must fail). The
+   reconciliation policies (0007) caught a real gap this way: RLS alone
+   let a mechanic mark their own in-progress count "reconciled" (RLS is
+   row-level, not column-level, so the existing "correct your own count"
+   policy didn't distinguish that column from `counted_quantity`) — fixed
+   with a trigger, see 0007's migration comment and the **Stock takes**
+   section below.
 
 4. In Supabase Auth settings, disable public sign-ups (Authentication →
    Providers → Email → disable "Allow new users to sign up") — staff
@@ -292,8 +303,8 @@ Built from the first batch of user stories:
   quantity to order), `v_purchase_costs_weekly` and
   `v_supplier_return_credits_weekly` (for the weekly/monthly cost
   planning story).
-- **`stock_takes`** / **`stock_take_counts`** (0006) — stocktake
-  sessions. See **Stock takes** below.
+- **`stock_takes`** / **`stock_take_counts`** (0006, extended in 0007 for
+  reconciliation) — stocktake sessions. See **Stock takes** below.
 
 ## What's built vs. still open
 
@@ -330,12 +341,11 @@ Not built yet — next slices, roughly in story order:
   bare-bones model row from a lookup, but there's no screen yet for
   filling in the rest, or for a model that has more than one generation
   on file.
-- **Applying a stock take's counts to actual stock levels.** Right now a
-  stock take only produces a report — it deliberately does not touch
-  `quantity_on_hand` or write `stock_movements`. Flagged to Joanne as an
-  open question below; wiring it up (as an `adjustment` movement per
-  discrepancy, admin/manager only, on completion or per-line) would be a
-  small follow-up once confirmed that's wanted.
+- Column-level restrictions where RLS alone can't express them (see the
+  `guard_stock_take_count_reconciliation` trigger note under **Stock
+  takes** for the one case that came up) are handled case by case as
+  they're found, not audited wholesale — worth a pass if the schema grows
+  much further.
 
 ## Stock ID / barcode scanning
 
@@ -385,9 +395,38 @@ number and enter QTY", producing a discrepancy report at the end.
   no Chromium dependency to fight with on Vercel's serverless functions).
   The site's nav header and the scan/complete controls are hidden when
   printing (`print:hidden`) so what prints is just the report.
-- **Does not touch stock levels.** This intentionally only produces a
-  report — it doesn't write `stock_movements` or change
-  `quantity_on_hand`. See **What's built vs. still open** above.
+- **Applying counts to stock levels** (0007) — once you've seen the
+  discrepancy report, admin/manager can update actual stock to match what
+  was counted, either one item at a time ("Update stock level" on a
+  discrepancy row) or all outstanding discrepancies at once ("Update all"
+  above the report). Either way this writes a normal `adjustment`
+  `stock_movement` — the same mechanism as the existing per-item "Adjust
+  stock" screen — tagged with `stock_take_id` so it's traceable back to
+  the stock take that produced it, rather than writing `quantity_on_hand`
+  directly.
+  - The adjustment is computed against the stock item's *current*
+    quantity at the moment you click, not the snapshot taken when it was
+    counted — so this stays correct even if stock moved (a mechanic used
+    a part) between counting and reconciling.
+  - Each discrepancy can only be applied once — `stock_take_counts.
+    reconciled_at` / `reconciled_movement_id` track that, so re-clicking
+    "Update all" later only picks up what's still outstanding rather than
+    double-adjusting anything already applied.
+  - **Items that were never scanned are deliberately left out of this.**
+    There's no counted quantity for them, so there's no well-defined
+    number to reconcile to — especially important since a *partial*
+    stocktake is expected to leave most items "not yet counted", and
+    those aren't discrepancies at all. If you know the real figure for
+    one without scanning it, correct it by hand from the item's own stock
+    page (existing "Adjust stock" screen) or just scan it.
+  - Admin/manager only, enforced at the database level, not just hidden
+    in the UI: RLS alone couldn't fully express this (a mechanic could
+    otherwise mark *their own* in-progress count "reconciled" — the
+    reconciliation columns aren't gated by the same row-ownership rule as
+    the count itself), so there's also a `BEFORE UPDATE` trigger
+    (`guard_stock_take_count_reconciliation`) that rejects a
+    non-admin/manager trying to change either reconciliation column.
+    Verified against real Postgres — see 0007's migration comment.
 
 ## Vehicle reg/VIN lookup
 
@@ -428,13 +467,8 @@ configured" message for anything not already on file.
 - **Single site/location** — `quantity_on_hand` and `ideal_stock_level`
   are per stock item, not per-location. Flag if a second site is ever on
   the cards. (Confirmed with Joanne: no second site for now.)
-- **Should completing a stock take update stock levels?** Right now a
-  stock take only reports discrepancies — it never touches
-  `quantity_on_hand`. That matches what was asked for ("a report...
-  produced... stock discrepancy"), but a real stocktake's usual next step
-  is correcting the system to match what was physically counted. Say if
-  you want that wired in (it would write an `adjustment` stock_movement
-  per discrepancy, admin/manager only, matching the existing "Adjust
-  stock" permission model) — currently that reconciliation has to be done
-  by hand, item by item, using the existing adjustment screen on each
-  stock item's detail page.
+- ~~Should completing a stock take update stock levels?~~ **Resolved:**
+  yes — see **Stock takes**' "Applying counts to stock levels" above.
+  Reconciling is a deliberate, separate action from completing the take
+  (not automatic on completion), and it's your choice per item or all
+  outstanding discrepancies at once, per what you asked for.
