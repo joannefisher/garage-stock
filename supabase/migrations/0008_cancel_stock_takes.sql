@@ -1,0 +1,20 @@
+-- 0008_cancel_stock_takes.sql
+-- Adds the ability to cancel a stock take that was started by mistake or
+-- abandoned partway through — there was previously no way to close one
+-- out other than completing it, which didn't fit "I started this by
+-- accident" or "we're not finishing this count today".
+--
+-- 'cancelled' joins 'in_progress' / 'completed' on stock_take_status.
+-- Must be its own migration/transaction — same reason as
+-- 0003_add_mechanic_role.sql: Postgres requires `ALTER TYPE ... ADD
+-- VALUE` to commit before the new value can be referenced anywhere else
+-- (application code counts, since that's a later deploy step regardless).
+--
+-- No RLS change needed: "Admins/managers can update stock takes" (0006)
+-- already permits any admin/manager status update, cancelling included —
+-- it isn't restricted to a specific target status. The application-level
+-- guards (only cancel an in_progress take, can't complete a cancelled
+-- one, etc.) live in src/app/dashboard/stock-takes/actions.ts, same as
+-- every other "friendlier error than a raw RLS failure" check in this
+-- codebase — RLS is still what actually enforces admin/manager-only.
+alter type public.stock_take_status add value 'cancelled';

@@ -143,6 +143,7 @@ supabase/
                             reconciled_movement_id on stock_take_counts,
                             stock_take_id on stock_movements, admin/manager
                             only (RLS policy + trigger guard)
+    0008_cancel_stock_takes.sql  Adds 'cancelled' to stock_take_status
 ```
 
 ## Getting started
@@ -161,7 +162,7 @@ supabase/
    cp .env.local.example .env.local
    ```
 
-3. Apply all seven migrations, in order (`0001` through `0007`) — either
+3. Apply all eight migrations, in order (`0001` through `0008`) — either
    paste them into the Supabase SQL Editor one at a time, or push them with
    the Supabase CLI:
 
@@ -177,7 +178,7 @@ supabase/
    anywhere else, so `0004` (which uses it) has to be a later migration,
    not appended to `0003`.
 
-   All seven were applied and exercised against a real local Postgres 16
+   All eight were applied and exercised against a real local Postgres 16
    during development — not just syntax-checked. That included rebuilding
    the RLS test harness to run as a real `authenticated`-role user rather
    than the Postgres superuser (which bypasses RLS and would have hidden
@@ -384,10 +385,28 @@ number and enter QTY", producing a discrepancy report at the end.
   "not yet counted" just lists what's left).
 - **Completing one** (admin/manager only) sets `status = 'completed'`,
   after which no more counts can be recorded against it (enforced by RLS,
-  not just the UI).
+  not just the UI). Only shown while a take is in progress; a mechanic
+  viewing an in-progress take sees a note explaining that completing (and
+  cancelling, below) is admin/manager only, rather than the button just
+  silently not being there.
+- **Cancelling one** (admin/manager only, 0008) — for a take started by
+  mistake or abandoned partway through. Sets `status = 'cancelled'`
+  (joining `in_progress`/`completed` on the same column); counts already
+  recorded are kept, not deleted, but no more can be added and it can't
+  be completed afterwards. The button asks for confirmation first (it's
+  the one destructive-ish action here — not reversible from the UI).
 - **Tracked**: every stock take is a real row, listed at
   `/dashboard/stock-takes`, so past counts and their reports stay
   available — nothing here is a one-off, throwaway computation.
+- **Recording a count shows a confirmation.** Originally it just silently
+  redirected back to the same-looking page — recording actually worked,
+  but with no visible change (especially re-counting an item already in
+  the table), it looked exactly like the button did nothing. Fixed: a
+  green "✓ Recorded N × ID" banner appears at the top after every
+  successful count. If you still see the "Record count" button not
+  respond at all (no banner, no error, nothing), that's a different
+  problem than the one just described — let me know what you see (a
+  browser console error, in particular) so it can be tracked down.
 - **Print / PDF**: the report page has a Print button
   (`window.print()`) and a Download PDF link
   (`/api/stock-takes/[id]/pdf`, generated server-side with `pdfkit` —

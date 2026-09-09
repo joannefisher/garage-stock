@@ -1,5 +1,5 @@
 /**
- * Hand-written types matching supabase/migrations/0001-0007.
+ * Hand-written types matching supabase/migrations/0001-0008.
  *
  * Once your Supabase project is linked, regenerate the real (guaranteed
  * accurate) types and replace this file entirely:
@@ -39,7 +39,7 @@ export type PurchaseOrderStatus =
   | "received"
   | "cancelled"
 export type SupplierReturnStatus = "draft" | "sent" | "credited"
-export type StockTakeStatus = "in_progress" | "completed"
+export type StockTakeStatus = "in_progress" | "completed" | "cancelled"
 
 // ---------------------------------------------------------------------
 // profiles (0001_init.sql)

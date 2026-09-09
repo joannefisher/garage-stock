@@ -97,7 +97,7 @@ export async function recordCount(formData: FormData) {
 
   const { data: stockItem } = await supabase
     .from("stock_items")
-    .select("id, quantity_on_hand")
+    .select("id, id_number, quantity_on_hand")
     .ilike("id_number", idOrBarcode)
     .maybeSingle()
 
@@ -120,7 +120,15 @@ export async function recordCount(formData: FormData) {
 
   if (error) fail(error.message)
 
-  redirect(`/dashboard/stock-takes/${stockTakeId}`)
+  // Redirect with a confirmation, not just back to the same-looking page —
+  // without this, recording a count (especially re-counting something
+  // already in the table) produced no visible change at all, which reads
+  // as "the button doesn't work" even though it succeeded. See CLAUDE.md.
+  redirect(
+    `/dashboard/stock-takes/${stockTakeId}?recorded=${encodeURIComponent(
+      stockItem.id_number
+    )}&recordedQty=${encodeURIComponent(quantity)}`
+  )
 }
 
 /**
@@ -140,13 +148,33 @@ export async function completeStockTake(formData: FormData) {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
+  function fail(message: string) {
+    redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
+  }
+
   const staff = await getCurrentStaff()
   if (!staff?.canManageStock) {
-    redirect(
-      `/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(
-        "Only admins and managers can complete a stock take."
-      )}`
+    fail("Only admins and managers can complete a stock take.")
+    return
+  }
+
+  const { data: stockTake } = await supabase
+    .from("stock_takes")
+    .select("status")
+    .eq("id", stockTakeId)
+    .maybeSingle()
+
+  if (!stockTake) {
+    fail("Stock take not found.")
+    return
+  }
+  if (stockTake.status !== "in_progress") {
+    fail(
+      stockTake.status === "completed"
+        ? "This stock take is already completed."
+        : "This stock take was cancelled and can't be completed."
     )
+    return
   }
 
   const { error } = await supabase
@@ -158,9 +186,63 @@ export async function completeStockTake(formData: FormData) {
     })
     .eq("id", stockTakeId)
 
-  if (error) {
-    redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(error.message)}`)
+  if (error) fail(error.message)
+
+  redirect(`/dashboard/stock-takes/${stockTakeId}`)
+}
+
+/**
+ * Cancels a stock take that was started by mistake or abandoned partway
+ * through. Admin/manager only, and only while still in_progress — there's
+ * no "un-cancel" or "cancel a completed take" from here. Counts already
+ * recorded are kept (not deleted) for the audit trail; the take just
+ * moves to a closed, non-actionable 'cancelled' state, same shape as
+ * completing it (see 0008_cancel_stock_takes.sql).
+ */
+export async function cancelStockTake(formData: FormData) {
+  const stockTakeId = str(formData, "stock_take_id")
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect("/login")
+
+  function fail(message: string) {
+    redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
+
+  const staff = await getCurrentStaff()
+  if (!staff?.canManageStock) {
+    fail("Only admins and managers can cancel a stock take.")
+    return
+  }
+
+  const { data: stockTake } = await supabase
+    .from("stock_takes")
+    .select("status")
+    .eq("id", stockTakeId)
+    .maybeSingle()
+
+  if (!stockTake) {
+    fail("Stock take not found.")
+    return
+  }
+  if (stockTake.status !== "in_progress") {
+    fail(
+      stockTake.status === "completed"
+        ? "This stock take is already completed and can't be cancelled."
+        : "This stock take is already cancelled."
+    )
+    return
+  }
+
+  const { error } = await supabase
+    .from("stock_takes")
+    .update({ status: "cancelled" })
+    .eq("id", stockTakeId)
+
+  if (error) fail(error.message)
 
   redirect(`/dashboard/stock-takes/${stockTakeId}`)
 }

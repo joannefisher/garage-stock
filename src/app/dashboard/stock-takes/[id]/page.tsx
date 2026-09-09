@@ -12,12 +12,19 @@ import { getStockTakeReport } from "@/lib/stock-takes/report"
 import {
   applyAllStockTakeDiscrepancies,
   applyStockTakeCount,
+  cancelStockTake,
   completeStockTake,
   recordCount,
 } from "../actions"
+import { CancelStockTakeForm } from "./cancel-stock-take-form"
 import { PrintButton } from "./print-button"
 
-type StockTakeDetailSearchParams = { error?: string; value?: string }
+type StockTakeDetailSearchParams = {
+  error?: string
+  value?: string
+  recorded?: string
+  recordedQty?: string
+}
 
 export default async function StockTakeDetailPage(
   props: PageProps<"/dashboard/stock-takes/[id]">
@@ -33,9 +40,16 @@ export default async function StockTakeDetailPage(
 
   const { stockTake, counted, missing } = report
   const inProgress = stockTake.status === "in_progress"
+  const cancelled = stockTake.status === "cancelled"
   const discrepancies = counted.filter((c) => c.difference !== 0)
   const discrepancyCount = discrepancies.length
   const outstandingDiscrepancies = discrepancies.filter((c) => !c.reconciled_at)
+  const statusLabel =
+    stockTake.status === "in_progress"
+      ? "In progress"
+      : stockTake.status === "completed"
+        ? "Completed"
+        : "Cancelled"
 
   return (
     <div className="flex flex-col gap-4">
@@ -43,8 +57,8 @@ export default async function StockTakeDetailPage(
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold">Stock take</h1>
-            <Badge variant={inProgress ? "outline" : "secondary"}>
-              {inProgress ? "In progress" : "Completed"}
+            <Badge variant={inProgress ? "outline" : cancelled ? "destructive" : "secondary"}>
+              {statusLabel}
             </Badge>
           </div>
           <p className="text-muted-foreground">
@@ -70,6 +84,13 @@ export default async function StockTakeDetailPage(
       {searchParams.error && (
         <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive print:hidden">
           {searchParams.error}
+        </p>
+      )}
+
+      {searchParams.recorded && (
+        <p className="rounded-md border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400 print:hidden">
+          ✓ Recorded {searchParams.recordedQty ?? "—"} × {searchParams.recorded} — see it in the
+          table below.
         </p>
       )}
 
@@ -111,12 +132,28 @@ export default async function StockTakeDetailPage(
       )}
 
       {inProgress && canManageStock && (
-        <form action={completeStockTake} className="print:hidden">
-          <input type="hidden" name="stock_take_id" value={stockTake.id} />
-          <Button type="submit" variant="secondary">
-            Complete stock take
-          </Button>
-        </form>
+        <div className="flex flex-wrap gap-2 print:hidden">
+          <form action={completeStockTake}>
+            <input type="hidden" name="stock_take_id" value={stockTake.id} />
+            <Button type="submit" variant="secondary">
+              Complete stock take
+            </Button>
+          </form>
+          <CancelStockTakeForm action={cancelStockTake} stockTakeId={stockTake.id} />
+        </div>
+      )}
+
+      {inProgress && !canManageStock && (
+        <p className="text-sm text-muted-foreground print:hidden">
+          Only admins and managers can complete or cancel this stock take.
+        </p>
+      )}
+
+      {cancelled && (
+        <p className="rounded-md border border-muted-foreground/30 bg-muted p-3 text-sm text-muted-foreground print:hidden">
+          This stock take was cancelled. Counts already recorded are kept below, but no more can
+          be added and it can&apos;t be completed.
+        </p>
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -125,7 +162,7 @@ export default async function StockTakeDetailPage(
         <SummaryStat label="Not yet counted" value={missing.length} />
       </div>
 
-      {canManageStock && outstandingDiscrepancies.length > 0 && (
+      {canManageStock && !cancelled && outstandingDiscrepancies.length > 0 && (
         <Card className="print:hidden border-destructive/40">
           <CardHeader>
             <CardTitle>
@@ -188,6 +225,8 @@ export default async function StockTakeDetailPage(
                         <span className="text-xs text-muted-foreground">Matched</span>
                       ) : c.reconciled_at ? (
                         <Badge variant="secondary">Updated</Badge>
+                      ) : cancelled ? (
+                        <span className="text-xs text-muted-foreground">—</span>
                       ) : (
                         <form action={applyStockTakeCount}>
                           <input type="hidden" name="stock_take_id" value={stockTake.id} />

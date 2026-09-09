@@ -19,6 +19,27 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
   server helper for "who's signed in / what role / can they manage
   stock" — use it rather than re-querying `profiles` ad hoc, and remember
   it's a UI convenience only, not the security boundary (RLS is).
+- **Click-testing Server Actions/interactivity without a live Supabase
+  project**: this sandbox has no live project, so up through 0007 every
+  server action was only verified by `tsc`/lint/build + testing the
+  RLS/SQL directly against local Postgres — the actual React/browser
+  layer (does the button click really submit, does the redirect really
+  happen) was never exercised. When a report came in that stock-take
+  buttons "didn't work" (Sept 2026), closing that gap meant standing up a
+  real click-test: copy the repo to `/tmp` (`cp -r`, not a symlinked
+  `node_modules` — Turbopack refuses to resolve through it, "Symlink
+  ... points out of the filesystem root"), swap `src/lib/supabase/
+  server.ts` for a small in-memory mock implementing just the query-
+  builder calls a given feature uses (`.from().select().eq()...`,
+  `.insert()`, `.update()`, `.upsert()`, plus `auth.getUser()` off a
+  hardcoded profile), no-op `src/proxy.ts`'s auth gate, run `next dev`,
+  and drive it with Playwright (`playwright` is installed globally at
+  `/home/claude/.npm-global/lib/node_modules/playwright`; this project
+  doesn't depend on it) to actually click buttons and assert on the
+  resulting DOM. Confirmed the actions themselves were fine; the real bug
+  was recordCount giving no visible feedback on success (see below).
+  Worth reaching for again — it catches an entire class of bug the other
+  verification layers structurally can't.
 - **RLS gotcha, already hit once — don't reintroduce it**: never write an
   inline correlated subquery against `profiles` inside an RLS policy
   (`exists (select 1 from profiles where id = auth.uid() and role =
@@ -62,9 +83,10 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
   `reconciled_movement_id` on stock_take_counts, `stock_take_id` on
   stock_movements). See the README's "Domain schema", "Stock takes" and
   "Open questions" sections for the reasoning and the assumptions flagged
-  to Joanne (single site/location, manual reg/VIN entry for now). All
-  migrations were applied and exercised against a real local Postgres 16
-  during development, not just syntax-checked.
+  to Joanne (single site/location, manual reg/VIN entry for now), and
+  `0008_cancel_stock_takes.sql` (adds `'cancelled'` to
+  `stock_take_status`). All migrations were applied and exercised against
+  a real local Postgres 16 during development, not just syntax-checked.
 - **RLS gotcha #2, hit once in 0007 — RLS is row-level, not
   column-level.** A policy that lets a user update "their own" row (e.g.
   "Staff can correct in-progress stock take counts", keyed on
@@ -85,8 +107,9 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
   (add item, admin/manager only), `/dashboard/stock/[id]` (detail, record
   usage — any staff — and adjustments — admin/manager only);
   `/dashboard/stock-takes` (scan-and-count stocktake sessions, tracked,
-  printable, PDF-downloadable, with per-item or bulk reconciliation to
-  actual stock levels — see README's "Stock takes"); and
+  printable, PDF-downloadable, cancellable, with per-item or bulk
+  reconciliation to actual stock levels — see README's "Stock takes");
+  and
   `/dashboard/vehicles` (registration search against the vehicle file,
   falling back to a DVSA MOT History API lookup — see
   `src/lib/vehicle-lookup/dvsa-mot-history.ts` for an important accuracy

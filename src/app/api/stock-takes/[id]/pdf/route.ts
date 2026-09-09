@@ -90,7 +90,15 @@ function buildPdf(
       .fontSize(10)
       .fillColor("#444444")
       .text(`Stock take ID: ${stockTake.id}`)
-      .text(`Status: ${stockTake.status === "completed" ? "Completed" : "In progress"}`)
+      .text(
+        `Status: ${
+          stockTake.status === "in_progress"
+            ? "In progress"
+            : stockTake.status === "cancelled"
+              ? "Cancelled"
+              : "Completed"
+        }`
+      )
       .text(
         `Started: ${new Date(stockTake.started_at).toLocaleString("en-GB")}` +
           (stockTake.started_by_name ? ` by ${stockTake.started_by_name}` : "")

@@ -62,8 +62,20 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
               <tr key={st.id} className="border-b last:border-0 hover:bg-accent/50">
                 <td className="px-3 py-2">{new Date(st.started_at).toLocaleString("en-GB")}</td>
                 <td className="px-3 py-2">
-                  <Badge variant={st.status === "completed" ? "secondary" : "outline"}>
-                    {st.status === "completed" ? "Completed" : "In progress"}
+                  <Badge
+                    variant={
+                      st.status === "in_progress"
+                        ? "outline"
+                        : st.status === "cancelled"
+                          ? "destructive"
+                          : "secondary"
+                    }
+                  >
+                    {st.status === "in_progress"
+                      ? "In progress"
+                      : st.status === "cancelled"
+                        ? "Cancelled"
+                        : "Completed"}
                   </Badge>
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">
@@ -74,7 +86,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
                     href={`/dashboard/stock-takes/${st.id}`}
                     className="font-medium underline-offset-4 hover:underline"
                   >
-                    {st.status === "completed" ? "View report" : "Continue counting"}
+                    {st.status === "in_progress" ? "Continue counting" : "View report"}
                   </Link>
                 </td>
               </tr>
