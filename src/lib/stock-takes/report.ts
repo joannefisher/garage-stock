@@ -76,13 +76,16 @@ export async function getStockTakeReport(id: string): Promise<StockTakeReport | 
   const profileIds = [stockTake.started_by, stockTake.completed_by].filter(
     (v): v is string => Boolean(v)
   )
-  const { data: profiles } = profileIds.length
-    ? await supabase.from("profiles").select("id, full_name").in("id", profileIds)
-    : { data: [] as { id: string; full_name: string }[] }
-  const profileName = (profileId: string | null) =>
-    profiles?.find((p) => p.id === profileId)?.full_name ?? null
 
-  const [{ data: countRows }, { data: activeItems }] = await Promise.all([
+  // These three don't depend on each other (only on stockTake, already
+  // fetched above), so they run as one parallel wave rather than three
+  // sequential round-trips — this report reloads after every stock-take
+  // action (recording a count, completing, reconciling...), so the
+  // latency here is felt on nearly every click in this feature.
+  const [{ data: profiles }, { data: countRows }, { data: activeItems }] = await Promise.all([
+    profileIds.length
+      ? supabase.from("profiles").select("id, full_name").in("id", profileIds)
+      : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
     supabase
       .from("stock_take_counts")
       .select(
@@ -94,6 +97,8 @@ export async function getStockTakeReport(id: string): Promise<StockTakeReport | 
       .select("id, id_number, name, quantity_on_hand")
       .eq("is_active", true),
   ])
+  const profileName = (profileId: string | null) =>
+    profiles?.find((p) => p.id === profileId)?.full_name ?? null
 
   const counts = (countRows ?? []) as unknown as RawCountRow[]
   const countedItemIds = new Set(counts.map((c) => c.stock_item_id))

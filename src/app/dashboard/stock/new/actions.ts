@@ -24,21 +24,19 @@ function num(formData: FormData, key: string, fallback = 0): number {
 export async function createStockItem(formData: FormData) {
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect("/login")
-  }
+  // One getCurrentStaff() call covers both "signed in?" and "what role?"
+  // — previously this also called supabase.auth.getUser() directly first,
+  // duplicating the network round-trip getCurrentStaff() already makes
+  // (on top of the one proxy.ts makes for every request). See CLAUDE.md.
+  const staff = await getCurrentStaff()
+  if (!staff) redirect("/login")
 
   // UI-level guard mirroring the "Admins/managers can manage stock items"
   // RLS policy (0002_domain_schema.sql) — the insert below would be
   // rejected by RLS regardless, but checking here first gives a plain
   // error message instead of a raw Postgres RLS failure. This is not the
   // security boundary; see the comment on getCurrentStaff().
-  const staff = await getCurrentStaff()
-  if (!staff?.canManageStock) {
+  if (!staff.canManageStock) {
     redirect(
       `/dashboard/stock/new?error=${encodeURIComponent(
         "Only admins and managers can add stock items."
@@ -112,7 +110,7 @@ export async function createStockItem(formData: FormData) {
       stock_item_id: stockItem.id,
       movement_type: "initial",
       quantity: initialQuantity,
-      performed_by: user.id,
+      performed_by: staff.id,
       notes: "Opening balance",
     })
   }

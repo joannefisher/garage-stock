@@ -33,25 +33,30 @@ export default async function VehiclesPage(props: PageProps<"/dashboard/vehicles
   const error = searchParams.error
   const saved = searchParams.saved === "1"
 
-  const staff = await getCurrentStaff()
-  const canManageStock = staff?.canManageStock ?? false
-
   const supabase = await createClient()
 
-  let onFile: VehicleOnFile | null = null
+  // getCurrentStaff() doesn't depend on the vehicle-on-file lookup (or vice
+  // versa), so run them concurrently rather than sequentially. See the
+  // perf note in CLAUDE.md.
+  const [staff, { data: onFileData }] = await Promise.all([
+    getCurrentStaff(),
+    registration
+      ? supabase
+          .from("vehicles")
+          .select("registration, colour, vin, vehicle_models(id, make, model, generation, fuel_type)")
+          .eq("registration", registration)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  const canManageStock = staff?.canManageStock ?? false
+
+  const onFile: VehicleOnFile | null = onFileData as VehicleOnFile | null
   let lookupResult: VehicleLookupResult | null = null
   let lookupError: string | null = null
   let lubricants: { lubricant_type: string; specification: string; capacity_litres: number | null }[] = []
   let fitments: { notes: string | null; stock_items: { id: string; id_number: string; name: string } | null }[] = []
 
   if (registration) {
-    const { data } = await supabase
-      .from("vehicles")
-      .select("registration, colour, vin, vehicle_models(id, make, model, generation, fuel_type)")
-      .eq("registration", registration)
-      .maybeSingle()
-    onFile = data as VehicleOnFile | null
-
     if (!onFile) {
       if (!vehicleLookupProvider.isConfigured()) {
         lookupError =

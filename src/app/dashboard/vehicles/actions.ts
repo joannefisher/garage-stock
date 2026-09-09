@@ -36,13 +36,15 @@ export async function saveVehicleLookup(formData: FormData) {
   const fuelType = optionalStr(formData, "fuel_type")
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
+  // One getCurrentStaff() call for both "signed in?" and "what role?" —
+  // previously also called supabase.auth.getUser() directly first,
+  // duplicating the round-trip getCurrentStaff() already makes. See the
+  // perf note in CLAUDE.md.
   const staff = await getCurrentStaff()
-  if (!staff?.canManageStock) {
+  if (!staff) redirect("/login")
+
+  if (!staff.canManageStock) {
     redirect(
       `/dashboard/vehicles?registration=${encodeURIComponent(
         registration

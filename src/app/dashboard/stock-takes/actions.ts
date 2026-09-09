@@ -19,13 +19,17 @@ function str(formData: FormData, key: string): string {
  */
 export async function startStockTake() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
+  // A single getCurrentStaff() call covers both "signed in?" and "what
+  // role?" — this used to also call supabase.auth.getUser() directly,
+  // which duplicated the auth.getUser() network round-trip already done
+  // inside getCurrentStaff() (on top of the one proxy.ts does for every
+  // request). That doubled-up call was happening in every admin-gated
+  // action in the app; see the perf note in CLAUDE.md.
   const staff = await getCurrentStaff()
-  if (!staff?.canManageStock) {
+  if (!staff) redirect("/login")
+
+  if (!staff.canManageStock) {
     redirect(
       `/dashboard/stock-takes?error=${encodeURIComponent(
         "Only admins and managers can start a stock take."
@@ -35,7 +39,7 @@ export async function startStockTake() {
 
   const { data, error } = await supabase
     .from("stock_takes")
-    .insert({ started_by: user.id })
+    .insert({ started_by: staff.id })
     .select("id")
     .single()
 
@@ -143,17 +147,14 @@ export async function completeStockTake(formData: FormData) {
   const stockTakeId = str(formData, "stock_take_id")
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
   function fail(message: string) {
     redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
 
   const staff = await getCurrentStaff()
-  if (!staff?.canManageStock) {
+  if (!staff) redirect("/login")
+  if (!staff.canManageStock) {
     fail("Only admins and managers can complete a stock take.")
     return
   }
@@ -181,7 +182,7 @@ export async function completeStockTake(formData: FormData) {
     .from("stock_takes")
     .update({
       status: "completed",
-      completed_by: user.id,
+      completed_by: staff.id,
       completed_at: new Date().toISOString(),
     })
     .eq("id", stockTakeId)
@@ -203,17 +204,14 @@ export async function cancelStockTake(formData: FormData) {
   const stockTakeId = str(formData, "stock_take_id")
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
   function fail(message: string) {
     redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
 
   const staff = await getCurrentStaff()
-  if (!staff?.canManageStock) {
+  if (!staff) redirect("/login")
+  if (!staff.canManageStock) {
     fail("Only admins and managers can cancel a stock take.")
     return
   }
@@ -328,17 +326,14 @@ export async function applyStockTakeCount(formData: FormData) {
   const stockTakeCountId = str(formData, "stock_take_count_id")
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
   function fail(message: string) {
     redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
 
   const staff = await getCurrentStaff()
-  if (!staff?.canManageStock) {
+  if (!staff) redirect("/login")
+  if (!staff.canManageStock) {
     fail("Only admins and managers can update stock levels from a stock take.")
     return
   }
@@ -355,7 +350,7 @@ export async function applyStockTakeCount(formData: FormData) {
     return
   }
 
-  const result = await reconcileStockTakeCount(supabase, stockTakeId, count, user.id)
+  const result = await reconcileStockTakeCount(supabase, stockTakeId, count, staff.id)
   if (result.error) fail(result.error)
 
   redirect(`/dashboard/stock-takes/${stockTakeId}`)
@@ -373,17 +368,14 @@ export async function applyAllStockTakeDiscrepancies(formData: FormData) {
   const stockTakeId = str(formData, "stock_take_id")
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
   function fail(message: string) {
     redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
 
   const staff = await getCurrentStaff()
-  if (!staff?.canManageStock) {
+  if (!staff) redirect("/login")
+  if (!staff.canManageStock) {
     fail("Only admins and managers can update stock levels from a stock take.")
     return
   }
@@ -401,16 +393,23 @@ export async function applyAllStockTakeDiscrepancies(formData: FormData) {
 
   const discrepancies = (counts ?? []).filter((c) => c.counted_quantity !== c.expected_quantity)
 
-  let applied = 0
-  for (const count of discrepancies) {
-    const result = await reconcileStockTakeCount(supabase, stockTakeId, count, user.id)
-    if (result.error) {
-      fail(
-        `Updated ${applied} of ${discrepancies.length} before hitting a problem: ${result.error}`
-      )
-      return
-    }
-    if (result.applied) applied += 1
+  // Each discrepancy is a distinct stock item (unique per stock_take_id +
+  // stock_item_id, see 0006), so these are independent writes — safe to
+  // fire concurrently rather than one at a time. With, say, 30
+  // discrepancies at ~3 sequential round-trips each, a plain for-await
+  // loop was the difference between one bulk update taking roughly as
+  // long as 90 round-trips vs. one round-trip's worth of latency.
+  const results = await Promise.all(
+    discrepancies.map((count) => reconcileStockTakeCount(supabase, stockTakeId, count, staff.id))
+  )
+  const applied = results.filter((r) => r.applied).length
+  const errors = results.filter((r) => r.error)
+
+  if (errors.length > 0) {
+    fail(
+      `Updated ${applied} of ${discrepancies.length}; ${errors.length} failed, e.g.: ${errors[0].error}`
+    )
+    return
   }
 
   redirect(`/dashboard/stock-takes/${stockTakeId}`)

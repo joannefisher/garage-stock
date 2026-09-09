@@ -32,10 +32,11 @@ export default async function StockTakeDetailPage(
   const { id } = await props.params
   const searchParams = (await props.searchParams) as StockTakeDetailSearchParams
 
-  const staff = await getCurrentStaff()
+  // getCurrentStaff() and the report fetch are independent — run
+  // concurrently rather than sequentially. See the perf note in CLAUDE.md.
+  const [staff, report] = await Promise.all([getCurrentStaff(), getStockTakeReport(id)])
   const canManageStock = staff?.canManageStock ?? false
 
-  const report = await getStockTakeReport(id)
   if (!report) notFound()
 
   const { stockTake, counted, missing } = report

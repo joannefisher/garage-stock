@@ -40,6 +40,54 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
   was recordCount giving no visible feedback on success (see below).
   Worth reaching for again — it catches an entire class of bug the other
   verification layers structurally can't.
+- **Performance: don't call `auth.getUser()`/`getCurrentStaff()` more than
+  once per request, and don't await independent queries sequentially**
+  (Sept 2026, after a "button response is too slow to use" report).
+  `supabase.auth.getUser()` is a genuine network round-trip to the
+  Supabase Auth server (deliberately, not `getSession()` — see the
+  comment in `src/lib/supabase/proxy.ts`), not a local JWT decode. Found
+  two compounding causes and fixed both:
+  1. Every admin/manager-gated Server Action called `supabase.auth.
+     getUser()` directly (for `user.id` / signed-out redirect) *and*
+     separately called `getCurrentStaff()` (for the role check) — two
+     `auth.getUser()` round-trips in one action, on top of the one
+     `proxy.ts` already does for every request. Fixed by calling
+     `getCurrentStaff()` exactly once per action and using `staff.id`/
+     `if (!staff) redirect("/login")` instead of a separate `auth.
+     getUser()`. Actions that don't need role info (`recordCount`,
+     `recordUsage`) correctly keep using plain `auth.getUser()` only —
+     switching them to `getCurrentStaff()` would add an unneeded
+     `profiles` query.
+  2. `getCurrentStaff()` itself was called twice per dashboard page
+     render — once by `SiteHeader` (in the shared dashboard layout) and
+     again by the page component it wraps, each paying its own `auth.
+     getUser()` + `profiles` round-trip. Fixed at the source: `
+     getCurrentStaff()` is now wrapped in React's `cache()`, which
+     dedupes calls with the same (no) arguments within a single
+     request/render pass — a Server Action or the next navigation still
+     gets a fresh call. Layout components can't receive props from the
+     page they wrap in the App Router, so `cache()` (not prop-drilling)
+     is the right fix for this specific shape of duplication.
+  Also parallelized independent `Promise.all`-able work that was
+  awaited sequentially: `getCurrentStaff()` alongside a page's own
+  independent data fetch (`stock/page.tsx`, `stock/[id]/page.tsx`,
+  `stock-takes/page.tsx`, `stock-takes/[id]/page.tsx`, `vehicles/
+  page.tsx`), `report.ts`'s profiles/counts/items queries, and (biggest
+  win under load) `applyAllStockTakeDiscrepancies`'s bulk reconciliation
+  — each discrepancy row is a distinct `stock_item_id` (unique per
+  `stock_take_id`, see 0006), so those writes are independent and safe
+  to fire concurrently rather than one at a time in a `for...of` loop.
+  Left `stock/new/page.tsx` alone: it checks `staff.canManageStock`
+  *before* querying suppliers and redirects if not permitted, so
+  fetching suppliers in parallel would mean doing that query even for a
+  visitor who's about to be redirected away — a deliberate sequential
+  guard, not the same bug. Verified with `tsc`/lint/build (font-fetch
+  fails in sandboxes with no route to fonts.googleapis.com — temporarily
+  drop the `next/font/google` import/usage in `src/app/layout.tsx` for
+  the build, then restore it, don't leave it stripped) and a full
+  Playwright click-through against a mocked Supabase backend (see the
+  click-testing note above) covering record count, bulk reconcile,
+  cancel, record usage/adjustment, and the vehicle lookup page.
 - **RLS gotcha, already hit once — don't reintroduce it**: never write an
   inline correlated subquery against `profiles` inside an RLS policy
   (`exists (select 1 from profiles where id = auth.uid() and role =

@@ -1,3 +1,5 @@
+import { cache } from "react"
+
 import { createClient } from "@/lib/supabase/server"
 import type { StaffRole } from "@/types/database.types"
 
@@ -27,8 +29,17 @@ export type CurrentStaff = {
  * does. If this helper and the RLS policies ever disagree, RLS wins — a
  * bug here can make the UI show something a mechanic can't actually do,
  * but it can't let them do something RLS forbids.
+ *
+ * Wrapped in React's `cache()` so multiple calls within the same request
+ * render (e.g. the shared SiteHeader in the dashboard layout AND the page
+ * component it wraps both calling this) reuse one result instead of each
+ * making their own `auth.getUser()` + `profiles` round-trip — this was
+ * found to be doubling the auth cost of every dashboard page load (Sept
+ * 2026 performance pass, see CLAUDE.md). `cache()` only dedupes within a
+ * single request/render pass, so a Server Action (a separate request) or
+ * the next page navigation still gets a fresh, correctly-revalidated call.
  */
-export async function getCurrentStaff(): Promise<CurrentStaff | null> {
+export const getCurrentStaff = cache(async (): Promise<CurrentStaff | null> => {
   const supabase = await createClient()
   const {
     data: { user },
@@ -53,4 +64,4 @@ export async function getCurrentStaff(): Promise<CurrentStaff | null> {
     isAdmin: role === "admin",
     isMechanic: role === "mechanic" || role === "staff",
   }
-}
+})

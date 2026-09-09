@@ -11,14 +11,18 @@ type StockTakesSearchParams = { error?: string }
 
 export default async function StockTakesPage(props: PageProps<"/dashboard/stock-takes">) {
   const searchParams = (await props.searchParams) as StockTakesSearchParams
-  const staff = await getCurrentStaff()
-  const canManageStock = staff?.canManageStock ?? false
-
   const supabase = await createClient()
-  const { data: stockTakes, error } = await supabase
-    .from("stock_takes")
-    .select("id, status, started_at, completed_at")
-    .order("started_at", { ascending: false })
+
+  // getCurrentStaff() and the stock_takes query are independent — run
+  // concurrently rather than sequentially. See the perf note in CLAUDE.md.
+  const [staff, { data: stockTakes, error }] = await Promise.all([
+    getCurrentStaff(),
+    supabase
+      .from("stock_takes")
+      .select("id, status, started_at, completed_at")
+      .order("started_at", { ascending: false }),
+  ])
+  const canManageStock = staff?.canManageStock ?? false
 
   return (
     <div className="flex flex-col gap-4">

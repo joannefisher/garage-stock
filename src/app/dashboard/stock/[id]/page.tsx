@@ -17,10 +17,12 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
   const error = typeof searchParams.error === "string" ? searchParams.error : undefined
 
   const supabase = await createClient()
-  const staff = await getCurrentStaff()
-  const canManageStock = staff?.canManageStock ?? false
 
-  const [{ data: item }, { data: movements }] = await Promise.all([
+  // getCurrentStaff() and the two item/movements queries don't depend on
+  // each other, so they run as one parallel wave rather than three
+  // sequential round-trips. See the perf note in CLAUDE.md.
+  const [staff, { data: item }, { data: movements }] = await Promise.all([
+    getCurrentStaff(),
     supabase
       .from("stock_items")
       .select("*, suppliers(name), part_details(*), tyre_details(*)")
@@ -33,6 +35,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
       .order("created_at", { ascending: false })
       .limit(20),
   ])
+  const canManageStock = staff?.canManageStock ?? false
 
   if (!item) notFound()
   const stockItem = item as unknown as StockItemWithDetails

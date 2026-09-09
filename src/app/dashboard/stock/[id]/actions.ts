@@ -45,17 +45,18 @@ export async function recordAdjustment(formData: FormData) {
   const notes = String(formData.get("notes") ?? "").trim()
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
 
-  if (!user) redirect("/login")
+  // One getCurrentStaff() call for both "signed in?" and "what role?" —
+  // previously also called supabase.auth.getUser() directly first,
+  // duplicating the round-trip getCurrentStaff() already makes. See the
+  // perf note in CLAUDE.md.
+  const staff = await getCurrentStaff()
+  if (!staff) redirect("/login")
 
   // Mirrors the "Admins/managers can record other stock movements" RLS
   // policy (0004_mechanic_permissions.sql), which is what actually blocks
   // a mechanic here — this just avoids surfacing a raw RLS error.
-  const staff = await getCurrentStaff()
-  if (!staff?.canManageStock) {
+  if (!staff.canManageStock) {
     redirect(
       `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(
         "Only admins and managers can adjust stock."
@@ -75,7 +76,7 @@ export async function recordAdjustment(formData: FormData) {
     stock_item_id: stockItemId,
     movement_type: "adjustment",
     quantity,
-    performed_by: user.id,
+    performed_by: staff.id,
     notes: notes || null,
   })
 

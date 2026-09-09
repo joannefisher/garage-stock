@@ -51,10 +51,12 @@ function matchesTypeFilters(item: StockItemWithDetails, params: StockSearchParam
 export default async function StockPage(props: PageProps<"/dashboard/stock">) {
   const searchParams = (await props.searchParams) as StockSearchParams
   const supabase = await createClient()
-  const staff = await getCurrentStaff()
-  const canManageStock = staff?.canManageStock ?? false
 
-  const [{ data: suppliers }, stockQuery] = await Promise.all([
+  // getCurrentStaff() doesn't depend on the suppliers/stock queries (or
+  // vice versa), so run all three concurrently. See the perf note in
+  // CLAUDE.md.
+  const [staff, { data: suppliers }, stockQuery] = await Promise.all([
+    getCurrentStaff(),
     supabase.from("suppliers").select("id, name").order("name"),
     (() => {
       let query = supabase
@@ -76,6 +78,7 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
       return query
     })(),
   ])
+  const canManageStock = staff?.canManageStock ?? false
 
   const { data, error } = stockQuery
   // Type-specific filters (make/model, tyre size/season/tier/commercial)

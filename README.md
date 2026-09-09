@@ -75,6 +75,22 @@ New staff accounts are created via the Supabase dashboard (Authentication
 → Users → Invite/Add user) or a small admin script using the service role
 key — there's no public sign-up page, by design.
 
+## Performance (Sept 2026 fix)
+
+If buttons across the app felt slow to respond, that was a real bug, not
+just Supabase latency: several places were calling Supabase Auth's
+`getUser()` — a network round-trip, not a local check — two or three times
+over for a single click (once in the page's shared header, again in the
+page itself, and again inside the button's own action). Fixed by
+de-duplicating those calls and running independent data queries
+concurrently instead of one after another; see the perf note in
+`CLAUDE.md` for the technical detail. Nothing about how any screen behaves
+changed — only how many round-trips it takes to get there. If things are
+still slow after pulling this, worth checking separately whether the app
+is running in dev mode (`npm run dev`, which recompiles on the fly) rather
+than a production build (`npm run build && npm start`), and whether your
+Supabase project's region is close to where the app is hosted/used.
+
 ## Project structure
 
 ```
