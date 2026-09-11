@@ -13,7 +13,7 @@ interface SupplierOption {
 }
 
 const selectClass =
-  "border-input h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+  "border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
 export function StockItemForm({
   suppliers,
@@ -29,7 +29,7 @@ export function StockItemForm({
   return (
     <form action={action} className="flex flex-col gap-6">
       {error && (
-        <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+        <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </p>
       )}

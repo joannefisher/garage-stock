@@ -26,7 +26,7 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold">Add stock item</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Add stock item</h1>
         <p className="text-muted-foreground">
           Enter a new part or tyre into the stock file.
         </p>

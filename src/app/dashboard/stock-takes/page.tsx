@@ -28,7 +28,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold">Stock takes</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Stock takes</h1>
           <p className="text-muted-foreground">
             Scan or type stock IDs to count them, then review the discrepancy report. A
             partial count (only scanning some items) works the same way — anything not
@@ -43,7 +43,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
       </div>
 
       {searchParams.error && (
-        <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+        <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {searchParams.error}
         </p>
       )}
@@ -51,7 +51,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
         <p className="text-sm text-destructive">Couldn&apos;t load stock takes: {error.message}</p>
       )}
 
-      <div className="overflow-x-auto rounded-lg border bg-card">
+      <div className="overflow-x-auto rounded-2xl border bg-card">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left text-muted-foreground">

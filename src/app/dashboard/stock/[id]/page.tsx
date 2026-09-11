@@ -42,16 +42,26 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-semibold">{stockItem.name}</h1>
-        <Badge variant="secondary">{stockItem.item_type}</Badge>
-        {stockItem.is_consignment && <Badge variant="outline">consignment</Badge>}
-        {stockItem.is_non_returnable && <Badge variant="outline">non-returnable</Badge>}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h1 className="font-heading text-3xl font-bold tracking-tight">{stockItem.name}</h1>
+        <Badge variant={stockItem.item_type === "part" ? "part" : "tyre"}>
+          {stockItem.item_type}
+        </Badge>
+        {stockItem.is_consignment && (
+          <Badge variant="outline" className="normal-case">
+            consignment
+          </Badge>
+        )}
+        {stockItem.is_non_returnable && (
+          <Badge variant="outline" className="normal-case">
+            non-returnable
+          </Badge>
+        )}
       </div>
-      <p className="text-muted-foreground">{stockItem.id_number}</p>
+      <p className="font-medium text-muted-foreground">{stockItem.id_number}</p>
 
       {error && (
-        <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+        <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </p>
       )}

@@ -94,7 +94,7 @@ export default async function VehiclesPage(props: PageProps<"/dashboard/vehicles
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold">Vehicle lookup</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Vehicle lookup</h1>
         <p className="text-muted-foreground">
           Search by registration to see fitment and lubricant data already on file, or look
           up make/model to start a new vehicle record.
@@ -120,12 +120,12 @@ export default async function VehiclesPage(props: PageProps<"/dashboard/vehicles
       </Card>
 
       {saved && (
-        <p className="rounded-md border border-green-600/50 bg-green-600/10 p-3 text-sm text-green-700">
+        <p className="rounded-xl border border-green-600/50 bg-green-600/10 p-3 text-sm text-green-700">
           Vehicle record saved.
         </p>
       )}
       {error && (
-        <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+        <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </p>
       )}
@@ -177,7 +177,7 @@ export default async function VehiclesPage(props: PageProps<"/dashboard/vehicles
       )}
 
       {registration && !onFile && lookupError && (
-        <p className="rounded-md border p-3 text-sm text-muted-foreground">{lookupError}</p>
+        <p className="rounded-xl border p-3 text-sm text-muted-foreground">{lookupError}</p>
       )}
 
       {registration && !onFile && lookupResult && (

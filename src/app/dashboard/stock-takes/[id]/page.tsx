@@ -57,7 +57,7 @@ export default async function StockTakeDetailPage(
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold">Stock take</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Stock take</h1>
             <Badge variant={inProgress ? "outline" : cancelled ? "destructive" : "secondary"}>
               {statusLabel}
             </Badge>
@@ -83,13 +83,13 @@ export default async function StockTakeDetailPage(
       </div>
 
       {searchParams.error && (
-        <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive print:hidden">
+        <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive print:hidden">
           {searchParams.error}
         </p>
       )}
 
       {searchParams.recorded && (
-        <p className="rounded-md border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400 print:hidden">
+        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400 print:hidden">
           ✓ Recorded {searchParams.recordedQty ?? "—"} × {searchParams.recorded} — see it in the
           table below.
         </p>
@@ -151,7 +151,7 @@ export default async function StockTakeDetailPage(
       )}
 
       {cancelled && (
-        <p className="rounded-md border border-muted-foreground/30 bg-muted p-3 text-sm text-muted-foreground print:hidden">
+        <p className="rounded-xl border border-muted-foreground/30 bg-muted p-3 text-sm text-muted-foreground print:hidden">
           This stock take was cancelled. Counts already recorded are kept below, but no more can
           be added and it can&apos;t be completed.
         </p>
@@ -310,9 +310,9 @@ function SummaryStat({
   warn?: boolean
 }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="rounded-2xl border bg-card p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className={`text-2xl font-semibold ${warn ? "text-destructive" : ""}`}>{value}</p>
+      <p className={`text-2xl font-bold tracking-tight ${warn ? "text-destructive" : ""}`}>{value}</p>
     </div>
   )
 }

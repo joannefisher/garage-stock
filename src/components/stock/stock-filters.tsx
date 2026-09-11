@@ -35,7 +35,7 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
   return (
     <form
       action={apply}
-      className="flex flex-col gap-4 rounded-lg border bg-card p-4"
+      className="flex flex-col gap-4 rounded-2xl border bg-card p-5"
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1.5">
@@ -55,7 +55,7 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
             name="item_type"
             value={itemType}
             onChange={(e) => setItemType(e.target.value)}
-            className="border-input h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+            className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           >
             <option value="">All</option>
             <option value="part">Parts</option>
@@ -69,7 +69,7 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
             id="supplier_id"
             name="supplier_id"
             defaultValue={searchParams.get("supplier_id") ?? ""}
-            className="border-input h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+            className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           >
             <option value="">Any supplier</option>
             {suppliers.map((s) => (
@@ -148,7 +148,7 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
               id="tyre_season"
               name="tyre_season"
               defaultValue={searchParams.get("tyre_season") ?? ""}
-              className="border-input h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             >
               <option value="">Any</option>
               <option value="summer">Summer</option>
@@ -162,7 +162,7 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
               id="tyre_tier"
               name="tyre_tier"
               defaultValue={searchParams.get("tyre_tier") ?? ""}
-              className="border-input h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             >
               <option value="">Any</option>
               <option value="budget">Budget</option>
@@ -176,7 +176,7 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
               id="tyre_commercial"
               name="tyre_commercial"
               defaultValue={searchParams.get("tyre_commercial") ?? ""}
-              className="border-input h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             >
               <option value="">Any</option>
               <option value="true">Commercial (XL)</option>
