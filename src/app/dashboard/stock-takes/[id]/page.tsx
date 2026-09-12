@@ -1,4 +1,6 @@
+import Link from "next/link"
 import { notFound } from "next/navigation"
+import { ArrowLeft } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -69,6 +71,13 @@ export default async function StockTakeDetailPage(
 
   return (
     <div className="flex flex-col gap-4">
+      <Button asChild variant="ghost" size="sm" className="self-start print:hidden">
+        <Link href="/dashboard/stock-takes">
+          <ArrowLeft />
+          Back to stocktakes
+        </Link>
+      </Button>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">

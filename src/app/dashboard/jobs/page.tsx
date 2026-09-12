@@ -1,8 +1,9 @@
 import Link from "next/link"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/server"
+
+import { JobsTable } from "./jobs-table"
 
 type JobsSearchParams = { status?: "open" | "closed" | "all"; error?: string }
 
@@ -13,7 +14,9 @@ export default async function JobsPage(props: PageProps<"/dashboard/jobs">) {
   const supabase = await createClient()
   let query = supabase
     .from("jobs")
-    .select("id, job_number, vehicle_registration, status, created_at, closed_at")
+    .select(
+      "id, job_number, vehicle_registration, status, created_at, closed_at, job_date, customer_name, customer_company, customer_email"
+    )
     .order("created_at", { ascending: false })
   if (status !== "all") query = query.eq("status", status)
   const { data: jobs, error } = await query
@@ -46,50 +49,12 @@ export default async function JobsPage(props: PageProps<"/dashboard/jobs">) {
         <StatusTab label="All" value="all" current={status} />
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-muted-foreground">
-              <th className="px-3 py-2 font-medium">Job</th>
-              <th className="px-3 py-2 font-medium">Vehicle</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Opened</th>
-              <th className="px-3 py-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {(jobs ?? []).map((job) => (
-              <tr key={job.id} className="border-b last:border-0 hover:bg-accent/50">
-                <td className="px-3 py-2 font-medium">{job.job_number}</td>
-                <td className="px-3 py-2 text-muted-foreground">{job.vehicle_registration ?? "—"}</td>
-                <td className="px-3 py-2">
-                  <Badge variant={job.status === "open" ? "outline" : "secondary"}>
-                    {job.status === "open" ? "Open" : "Closed"}
-                  </Badge>
-                </td>
-                <td className="px-3 py-2 text-muted-foreground">
-                  {new Date(job.created_at).toLocaleString("en-GB")}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <Link
-                    href={`/dashboard/jobs/${job.id}`}
-                    className="font-medium underline-offset-4 hover:underline"
-                  >
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {(jobs ?? []).length === 0 && !error && (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                  {status === "open" ? "No open jobs." : status === "closed" ? "No closed jobs." : "No jobs yet."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <JobsTable
+        jobs={jobs ?? []}
+        emptyMessage={
+          status === "open" ? "No open jobs." : status === "closed" ? "No closed jobs." : "No jobs yet."
+        }
+      />
     </div>
   )
 }

@@ -10,6 +10,10 @@ type NewJobSearchParams = {
   job_number?: string
   vehicle_registration?: string
   notes?: string
+  customer_name?: string
+  customer_company?: string
+  customer_email?: string
+  job_date?: string
 }
 
 export default async function NewJobPage(props: PageProps<"/dashboard/jobs/new">) {
@@ -20,7 +24,8 @@ export default async function NewJobPage(props: PageProps<"/dashboard/jobs/new">
       <div>
         <h1 className="font-heading text-2xl font-bold tracking-tight">New job</h1>
         <p className="text-muted-foreground">
-          Any signed-in staff member can open a job — the vehicle and notes are optional.
+          Any signed-in staff member can open a job — everything except the job reference is
+          optional.
         </p>
       </div>
 
@@ -53,6 +58,43 @@ export default async function NewJobPage(props: PageProps<"/dashboard/jobs/new">
                 name="vehicle_registration"
                 placeholder="e.g. AB12 CDE"
                 defaultValue={searchParams.vehicle_registration ?? ""}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="job_date">Job date (optional)</Label>
+              <Input
+                id="job_date"
+                name="job_date"
+                type="date"
+                defaultValue={searchParams.job_date ?? ""}
+                className="w-48"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="customer_name">Customer name (optional)</Label>
+                <Input
+                  id="customer_name"
+                  name="customer_name"
+                  defaultValue={searchParams.customer_name ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="customer_company">Company (optional)</Label>
+                <Input
+                  id="customer_company"
+                  name="customer_company"
+                  defaultValue={searchParams.customer_company ?? ""}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customer_email">Customer email (optional)</Label>
+              <Input
+                id="customer_email"
+                name="customer_email"
+                type="email"
+                defaultValue={searchParams.customer_email ?? ""}
               />
             </div>
             <div className="flex flex-col gap-1.5">

@@ -32,17 +32,25 @@ export async function createJob(formData: FormData) {
     ?.replace(/\s+/g, "")
     .toUpperCase() || null
   const notes = optionalStr(formData, "notes")
+  const customerName = optionalStr(formData, "customer_name")
+  const customerCompany = optionalStr(formData, "customer_company")
+  const customerEmail = optionalStr(formData, "customer_email")
+  const jobDate = optionalStr(formData, "job_date")
 
   const supabase = await createClient()
 
   function fail(message: string) {
-    redirect(
-      `/dashboard/jobs/new?error=${encodeURIComponent(message)}&job_number=${encodeURIComponent(
-        jobNumber
-      )}&vehicle_registration=${encodeURIComponent(vehicleRegistration ?? "")}&notes=${encodeURIComponent(
-        notes ?? ""
-      )}`
-    )
+    const params = new URLSearchParams({
+      error: message,
+      job_number: jobNumber,
+      vehicle_registration: vehicleRegistration ?? "",
+      notes: notes ?? "",
+      customer_name: customerName ?? "",
+      customer_company: customerCompany ?? "",
+      customer_email: customerEmail ?? "",
+      job_date: jobDate ?? "",
+    })
+    redirect(`/dashboard/jobs/new?${params.toString()}`)
   }
 
   if (!jobNumber) fail("A job reference is required.")
@@ -64,6 +72,10 @@ export async function createJob(formData: FormData) {
       vehicle_registration: vehicleRegistration,
       vehicle_id: matchedVehicle?.id ?? null,
       notes,
+      customer_name: customerName,
+      customer_company: customerCompany,
+      customer_email: customerEmail,
+      job_date: jobDate,
       created_by: staff.id,
     })
     .select("id")
@@ -81,8 +93,8 @@ export async function createJob(formData: FormData) {
  * Closes a job. Any signed-in staff member, per Joanne's design note in
  * 0009_jobs.sql — jobs are a lower-stakes worklist, not gated like most
  * other write actions in this app. Once closed, no more parts can be
- * added (enforced by RLS on stock_movements, see that migration) — there's
- * deliberately no "reopen".
+ * added (enforced by RLS on stock_movements, see that migration).
+ * Reopening (below) is a separate, admin-only action.
  */
 export async function closeJob(formData: FormData) {
   const jobId = str(formData, "job_id")
@@ -113,6 +125,64 @@ export async function closeJob(formData: FormData) {
   const { error } = await supabase
     .from("jobs")
     .update({ status: "closed", closed_by: staff.id, closed_at: new Date().toISOString() })
+    .eq("id", jobId)
+
+  if (error) fail(friendlyDbError(error))
+
+  redirect(`/dashboard/jobs/${jobId}`)
+}
+
+/**
+ * Reopens a closed job — admin only. 0009_jobs.sql deliberately shipped
+ * without this ("if that turns out to be needed, it's a follow-up"); per
+ * Joanne it's now needed, but as an admin override, not the same "any
+ * staff" trust level closing/opening a job has. The real gatekeeper is
+ * the guard_job_reopen trigger (0010_jobs_enhancements.sql) — it blocks
+ * the closed->open transition for anyone but an admin at the database
+ * level, the same "RLS can't express this transition alone" pattern as
+ * guard_stock_take_count_reconciliation (see CLAUDE.md's "RLS gotcha
+ * #2"). This check just gives a friendlier message than a raw trigger
+ * exception.
+ */
+export async function reopenJob(formData: FormData) {
+  const jobId = str(formData, "job_id")
+
+  const supabase = await createClient()
+
+  function fail(message: string) {
+    redirect(`/dashboard/jobs/${jobId}?error=${encodeURIComponent(message)}`)
+  }
+
+  // getCurrentStaff() and the job status check are independent — run
+  // concurrently rather than sequentially. See the perf note in CLAUDE.md.
+  const [staff, { data: job }] = await Promise.all([
+    getCurrentStaff(),
+    supabase.from("jobs").select("status").eq("id", jobId).maybeSingle(),
+  ])
+  if (!staff) redirect("/login")
+  if (!staff.isAdmin) {
+    fail("Only admins can reopen a closed job.")
+    return
+  }
+
+  if (!job) {
+    fail("That job no longer exists.")
+    return
+  }
+  if (job.status !== "closed") {
+    fail("This job is already open.")
+    return
+  }
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({
+      status: "open",
+      closed_by: null,
+      closed_at: null,
+      reopened_by: staff.id,
+      reopened_at: new Date().toISOString(),
+    })
     .eq("id", jobId)
 
   if (error) fail(friendlyDbError(error))

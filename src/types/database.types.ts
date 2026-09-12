@@ -474,7 +474,7 @@ export type VehicleModelFitmentInsert = {
 export type VehicleModelFitmentUpdate = Partial<VehicleModelFitmentInsert>
 
 // ---------------------------------------------------------------------
-// jobs (0009_jobs.sql)
+// jobs (0009_jobs.sql, extended by 0010_jobs_enhancements.sql)
 // ---------------------------------------------------------------------
 
 export type JobRow = {
@@ -489,6 +489,18 @@ export type JobRow = {
   closed_by: string | null
   closed_at: string | null
   updated_at: string
+  // 0010_jobs_enhancements.sql — customer contact details and the date
+  // the work itself is for/on (distinct from created_at, the system
+  // "opened" timestamp).
+  customer_name: string | null
+  customer_company: string | null
+  customer_email: string | null
+  job_date: string | null
+  // Tracks the most recent reopen only (same "latest event" shape as
+  // closed_by/closed_at above) — reopening is admin-only, enforced by the
+  // guard_job_reopen trigger, not by RLS alone (see that migration).
+  reopened_by: string | null
+  reopened_at: string | null
 }
 export type JobInsert = {
   id?: string
@@ -502,6 +514,12 @@ export type JobInsert = {
   closed_by?: string | null
   closed_at?: string | null
   updated_at?: string
+  customer_name?: string | null
+  customer_company?: string | null
+  customer_email?: string | null
+  job_date?: string | null
+  reopened_by?: string | null
+  reopened_at?: string | null
 }
 export type JobUpdate = Partial<JobInsert>
 

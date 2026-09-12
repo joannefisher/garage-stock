@@ -1,15 +1,20 @@
+import Link from "next/link"
 import { notFound } from "next/navigation"
+import { ArrowLeft } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SubmitButton } from "@/components/ui/submit-button"
 import { ScannableIdInput } from "@/components/scan/scannable-id-input"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentStaff } from "@/lib/auth/current-staff"
 
-import { addPartToJob, closeJob } from "../actions"
+import { addPartToJob, closeJob, reopenJob } from "../actions"
 import { CloseJobForm } from "./close-job-form"
+import { ReopenJobForm } from "./reopen-job-form"
 
 type JobDetailSearchParams = {
   error?: string
@@ -22,7 +27,13 @@ type UsageRow = {
   id: string
   quantity: number
   created_at: string
-  stock_items: { id: string; id_number: string; name: string } | null
+  stock_items: {
+    id: string
+    id_number: string
+    name: string
+    cost_price: number
+    selling_price: number
+  } | null
 }
 
 export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[id]">) {
@@ -31,17 +42,21 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
 
   const supabase = await createClient()
 
-  // The job and its usage list are independent reads — run concurrently
-  // rather than sequentially. See the perf note in CLAUDE.md.
-  const [{ data: job }, { data: usageData, error: usageError }] = await Promise.all([
+  // getCurrentStaff(), the job, and its usage list are independent reads —
+  // run concurrently rather than sequentially. See the perf note in
+  // CLAUDE.md.
+  const [staff, { data: job }, { data: usageData, error: usageError }] = await Promise.all([
+    getCurrentStaff(),
     supabase
       .from("jobs")
-      .select("id, job_number, vehicle_registration, notes, status, created_at, closed_at")
+      .select(
+        "id, job_number, vehicle_registration, notes, status, created_at, closed_at, customer_name, customer_company, customer_email, job_date"
+      )
       .eq("id", id)
       .maybeSingle(),
     supabase
       .from("stock_movements")
-      .select("id, quantity, created_at, stock_items(id, id_number, name)")
+      .select("id, quantity, created_at, stock_items(id, id_number, name, cost_price, selling_price)")
       .eq("job_id", id)
       .eq("movement_type", "used")
       .order("created_at", { ascending: false }),
@@ -51,9 +66,22 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
 
   const usage = (usageData ?? []) as unknown as UsageRow[]
   const open = job.status === "open"
+  const canManageStock = staff?.canManageStock ?? false
+  const totalCost = usage.reduce((sum, m) => sum + (m.stock_items?.cost_price ?? 0) * Math.abs(m.quantity), 0)
+  const totalSelling = usage.reduce(
+    (sum, m) => sum + (m.stock_items?.selling_price ?? 0) * Math.abs(m.quantity),
+    0
+  )
 
   return (
     <div className="flex flex-col gap-4">
+      <Button asChild variant="ghost" size="sm" className="self-start">
+        <Link href="/dashboard/jobs">
+          <ArrowLeft />
+          Back to jobs
+        </Link>
+      </Button>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -66,6 +94,7 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
           </p>
         </div>
         {open && <CloseJobForm action={closeJob} jobId={job.id} />}
+        {!open && staff?.isAdmin && <ReopenJobForm action={reopenJob} jobId={job.id} />}
       </div>
 
       {searchParams.error && (
@@ -85,6 +114,13 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
         </CardHeader>
         <CardContent className="flex flex-col gap-1.5 text-sm">
           <Row label="Vehicle" value={job.vehicle_registration ?? "—"} />
+          <Row
+            label="Job date"
+            value={job.job_date ? new Date(job.job_date).toLocaleDateString("en-GB") : "—"}
+          />
+          <Row label="Customer" value={job.customer_name ?? "—"} />
+          <Row label="Company" value={job.customer_company ?? "—"} />
+          <Row label="Email" value={job.customer_email ?? "—"} />
           {job.notes && <Row label="Notes" value={job.notes} />}
         </CardContent>
       </Card>
@@ -147,6 +183,12 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
                 <th className="px-2 py-1.5 font-medium">ID</th>
                 <th className="px-2 py-1.5 font-medium">Name</th>
                 <th className="px-2 py-1.5 text-right font-medium">Qty</th>
+                {canManageStock && (
+                  <>
+                    <th className="px-2 py-1.5 text-right font-medium">Cost</th>
+                    <th className="px-2 py-1.5 text-right font-medium">Selling</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -158,13 +200,36 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
                   <td className="px-2 py-1.5 font-medium">{m.stock_items?.id_number ?? "—"}</td>
                   <td className="px-2 py-1.5">{m.stock_items?.name ?? "—"}</td>
                   <td className="px-2 py-1.5 text-right">{Math.abs(m.quantity)}</td>
+                  {canManageStock && (
+                    <>
+                      <td className="px-2 py-1.5 text-right">
+                        {m.stock_items ? `£${m.stock_items.cost_price.toFixed(2)}` : "—"}
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        {m.stock_items ? `£${m.stock_items.selling_price.toFixed(2)}` : "—"}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
               {usage.length === 0 && !usageError && (
                 <tr>
-                  <td colSpan={4} className="px-2 py-6 text-center text-muted-foreground">
+                  <td
+                    colSpan={canManageStock ? 6 : 4}
+                    className="px-2 py-6 text-center text-muted-foreground"
+                  >
                     No parts added to this job yet.
                   </td>
+                </tr>
+              )}
+              {usage.length > 0 && canManageStock && (
+                <tr className="font-semibold">
+                  <td className="px-2 py-1.5" colSpan={3}>
+                    Total
+                  </td>
+                  <td className="px-2 py-1.5 text-right"></td>
+                  <td className="px-2 py-1.5 text-right">£{totalCost.toFixed(2)}</td>
+                  <td className="px-2 py-1.5 text-right">£{totalSelling.toFixed(2)}</td>
                 </tr>
               )}
             </tbody>
