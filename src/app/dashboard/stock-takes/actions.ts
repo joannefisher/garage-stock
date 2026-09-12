@@ -72,10 +72,6 @@ export async function recordCount(formData: FormData) {
   const quantity = Number(str(formData, "quantity"))
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
   function fail(message: string) {
     redirect(
@@ -88,22 +84,33 @@ export async function recordCount(formData: FormData) {
   if (!idOrBarcode) fail("Scan or enter an ID/barcode.")
   if (!Number.isFinite(quantity) || quantity < 0) fail("Enter a quantity of 0 or more.")
 
-  const { data: stockTake } = await supabase
-    .from("stock_takes")
-    .select("status")
-    .eq("id", stockTakeId)
-    .maybeSingle()
+  // auth.getUser(), the stock_take status check and the stock_item lookup
+  // are three independent reads (none depends on another's result), but
+  // this is the action a mechanic fires once per scanned item during a
+  // stock take — so it was the single highest-value place to stop paying
+  // for them one at a time. See CLAUDE.md's "creating records is slow"
+  // note: each round trip to this project currently costs ~100-250ms.
+  const [
+    {
+      data: { user },
+    },
+    { data: stockTake },
+    { data: stockItem },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("stock_takes").select("status").eq("id", stockTakeId).maybeSingle(),
+    supabase
+      .from("stock_items")
+      .select("id, id_number, quantity_on_hand")
+      .ilike("id_number", idOrBarcode)
+      .maybeSingle(),
+  ])
 
+  if (!user) redirect("/login")
   if (!stockTake) fail("Stock take not found.")
   if (stockTake?.status !== "in_progress") {
     fail("This stock take is already completed — counts can no longer be recorded.")
   }
-
-  const { data: stockItem } = await supabase
-    .from("stock_items")
-    .select("id, id_number, quantity_on_hand")
-    .ilike("id_number", idOrBarcode)
-    .maybeSingle()
 
   if (!stockItem) {
     fail(`No stock item found for "${idOrBarcode}".`)
@@ -152,18 +159,18 @@ export async function completeStockTake(formData: FormData) {
     redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
 
-  const staff = await getCurrentStaff()
+  // getCurrentStaff() and the stock_takes status check are independent —
+  // run concurrently rather than sequentially. See the perf note in
+  // CLAUDE.md ("creating records is slow").
+  const [staff, { data: stockTake }] = await Promise.all([
+    getCurrentStaff(),
+    supabase.from("stock_takes").select("status").eq("id", stockTakeId).maybeSingle(),
+  ])
   if (!staff) redirect("/login")
   if (!staff.canManageStock) {
     fail("Only admins and managers can complete a stock take.")
     return
   }
-
-  const { data: stockTake } = await supabase
-    .from("stock_takes")
-    .select("status")
-    .eq("id", stockTakeId)
-    .maybeSingle()
 
   if (!stockTake) {
     fail("Stock take not found.")
@@ -209,18 +216,18 @@ export async function cancelStockTake(formData: FormData) {
     redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
 
-  const staff = await getCurrentStaff()
+  // getCurrentStaff() and the stock_takes status check are independent —
+  // run concurrently rather than sequentially. See the perf note in
+  // CLAUDE.md ("creating records is slow").
+  const [staff, { data: stockTake }] = await Promise.all([
+    getCurrentStaff(),
+    supabase.from("stock_takes").select("status").eq("id", stockTakeId).maybeSingle(),
+  ])
   if (!staff) redirect("/login")
   if (!staff.canManageStock) {
     fail("Only admins and managers can cancel a stock take.")
     return
   }
-
-  const { data: stockTake } = await supabase
-    .from("stock_takes")
-    .select("status")
-    .eq("id", stockTakeId)
-    .maybeSingle()
 
   if (!stockTake) {
     fail("Stock take not found.")
@@ -331,19 +338,23 @@ export async function applyStockTakeCount(formData: FormData) {
     redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
 
-  const staff = await getCurrentStaff()
+  // getCurrentStaff() and the count lookup are independent — run
+  // concurrently rather than sequentially. See the perf note in
+  // CLAUDE.md ("creating records is slow").
+  const [staff, { data: count }] = await Promise.all([
+    getCurrentStaff(),
+    supabase
+      .from("stock_take_counts")
+      .select("id, stock_item_id, counted_quantity, reconciled_at")
+      .eq("id", stockTakeCountId)
+      .eq("stock_take_id", stockTakeId)
+      .maybeSingle(),
+  ])
   if (!staff) redirect("/login")
   if (!staff.canManageStock) {
     fail("Only admins and managers can update stock levels from a stock take.")
     return
   }
-
-  const { data: count } = await supabase
-    .from("stock_take_counts")
-    .select("id, stock_item_id, counted_quantity, reconciled_at")
-    .eq("id", stockTakeCountId)
-    .eq("stock_take_id", stockTakeId)
-    .maybeSingle()
 
   if (!count) {
     fail("That count no longer exists.")
@@ -373,18 +384,22 @@ export async function applyAllStockTakeDiscrepancies(formData: FormData) {
     redirect(`/dashboard/stock-takes/${stockTakeId}?error=${encodeURIComponent(message)}`)
   }
 
-  const staff = await getCurrentStaff()
+  // getCurrentStaff() and the discrepancy list are independent — run
+  // concurrently rather than sequentially. See the perf note in
+  // CLAUDE.md ("creating records is slow").
+  const [staff, { data: counts, error: countsError }] = await Promise.all([
+    getCurrentStaff(),
+    supabase
+      .from("stock_take_counts")
+      .select("id, stock_item_id, counted_quantity, expected_quantity, reconciled_at")
+      .eq("stock_take_id", stockTakeId)
+      .is("reconciled_at", null),
+  ])
   if (!staff) redirect("/login")
   if (!staff.canManageStock) {
     fail("Only admins and managers can update stock levels from a stock take.")
     return
   }
-
-  const { data: counts, error: countsError } = await supabase
-    .from("stock_take_counts")
-    .select("id, stock_item_id, counted_quantity, expected_quantity, reconciled_at")
-    .eq("stock_take_id", stockTakeId)
-    .is("reconciled_at", null)
 
   if (countsError) {
     fail(countsError.message)

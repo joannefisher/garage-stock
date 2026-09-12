@@ -74,45 +74,56 @@ export async function createStockItem(formData: FormData) {
     )
   }
 
-  if (itemType === "part") {
-    const { error } = await supabase.from("part_details").insert({
-      stock_item_id: stockItem.id,
-      vehicle_make: optionalStr(formData, "vehicle_make"),
-      vehicle_model: optionalStr(formData, "vehicle_model"),
-      manufacturer_part_number: optionalStr(formData, "manufacturer_part_number"),
-      oem_part_number: optionalStr(formData, "oem_part_number"),
-    })
-    if (error) {
-      redirect(`/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(error.message)}`)
-    }
-  } else {
-    const { error } = await supabase.from("tyre_details").insert({
-      stock_item_id: stockItem.id,
-      width: num(formData, "width"),
-      profile: num(formData, "profile"),
-      rim_diameter: num(formData, "rim_diameter"),
-      load_index: optionalStr(formData, "load_index"),
-      speed_rating: optionalStr(formData, "speed_rating"),
-      is_xl: formData.get("is_xl") === "on",
-      is_commercial: formData.get("is_commercial") === "on",
-      season: str(formData, "season") as TyreSeason,
-      tier: str(formData, "tier") as TyreTier,
-      brand: optionalStr(formData, "brand"),
-      pattern: optionalStr(formData, "pattern"),
-    })
-    if (error) {
-      redirect(`/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(error.message)}`)
-    }
-  }
+  // The type-details insert (part_details/tyre_details) and the opening-
+  // balance movement are both independent follow-ups to the stock_items
+  // insert above — neither depends on the other, only on stockItem.id —
+  // so they run as one parallel wave instead of two sequential round
+  // trips. Each request to this project currently costs ~100-250ms (see
+  // CLAUDE.md's "creating records is slow" note), so every avoidable
+  // sequential hop is worth cutting.
+  const [detailsResult, movementResult] = await Promise.all([
+    itemType === "part"
+      ? supabase.from("part_details").insert({
+          stock_item_id: stockItem.id,
+          vehicle_make: optionalStr(formData, "vehicle_make"),
+          vehicle_model: optionalStr(formData, "vehicle_model"),
+          manufacturer_part_number: optionalStr(formData, "manufacturer_part_number"),
+          oem_part_number: optionalStr(formData, "oem_part_number"),
+        })
+      : supabase.from("tyre_details").insert({
+          stock_item_id: stockItem.id,
+          width: num(formData, "width"),
+          profile: num(formData, "profile"),
+          rim_diameter: num(formData, "rim_diameter"),
+          load_index: optionalStr(formData, "load_index"),
+          speed_rating: optionalStr(formData, "speed_rating"),
+          is_xl: formData.get("is_xl") === "on",
+          is_commercial: formData.get("is_commercial") === "on",
+          season: str(formData, "season") as TyreSeason,
+          tier: str(formData, "tier") as TyreTier,
+          brand: optionalStr(formData, "brand"),
+          pattern: optionalStr(formData, "pattern"),
+        }),
+    initialQuantity !== 0
+      ? supabase.from("stock_movements").insert({
+          stock_item_id: stockItem.id,
+          movement_type: "initial",
+          quantity: initialQuantity,
+          performed_by: staff.id,
+          notes: "Opening balance",
+        })
+      : Promise.resolve({ error: null }),
+  ])
 
-  if (initialQuantity !== 0) {
-    await supabase.from("stock_movements").insert({
-      stock_item_id: stockItem.id,
-      movement_type: "initial",
-      quantity: initialQuantity,
-      performed_by: staff.id,
-      notes: "Opening balance",
-    })
+  if (detailsResult.error) {
+    redirect(
+      `/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(detailsResult.error.message)}`
+    )
+  }
+  if (movementResult.error) {
+    redirect(
+      `/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(movementResult.error.message)}`
+    )
   }
 
   redirect("/dashboard/stock")

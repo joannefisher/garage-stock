@@ -37,11 +37,26 @@ export async function saveVehicleLookup(formData: FormData) {
 
   const supabase = await createClient()
 
-  // One getCurrentStaff() call for both "signed in?" and "what role?" —
-  // previously also called supabase.auth.getUser() directly first,
-  // duplicating the round-trip getCurrentStaff() already makes. See the
-  // perf note in CLAUDE.md.
-  const staff = await getCurrentStaff()
+  // getCurrentStaff(), the vehicle_models lookup (keyed on make/model) and
+  // the vehicles lookup (keyed on registration) are three independent
+  // reads — none needs another's result — so they run as one parallel
+  // wave instead of three sequential round trips. See the perf note in
+  // CLAUDE.md ("creating records is slow"): each round trip to this
+  // project currently costs ~100-250ms.
+  const [staff, { data: existingModel }, { data: existingVehicle }] = await Promise.all([
+    getCurrentStaff(),
+    make && model
+      ? supabase
+          .from("vehicle_models")
+          .select("id")
+          .ilike("make", make)
+          .ilike("model", model)
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase.from("vehicles").select("id").eq("registration", registration).maybeSingle(),
+  ])
+
   if (!staff) redirect("/login")
 
   if (!staff.canManageStock) {
@@ -59,14 +74,6 @@ export async function saveVehicleLookup(formData: FormData) {
   let vehicleModelId: string | null = null
 
   if (make && model) {
-    const { data: existingModel } = await supabase
-      .from("vehicle_models")
-      .select("id")
-      .ilike("make", make)
-      .ilike("model", model)
-      .limit(1)
-      .maybeSingle()
-
     if (existingModel) {
       vehicleModelId = existingModel.id
     } else {
@@ -86,12 +93,6 @@ export async function saveVehicleLookup(formData: FormData) {
       vehicleModelId = newModel?.id ?? null
     }
   }
-
-  const { data: existingVehicle } = await supabase
-    .from("vehicles")
-    .select("id")
-    .eq("registration", registration)
-    .maybeSingle()
 
   const vehiclePayload = {
     registration,
