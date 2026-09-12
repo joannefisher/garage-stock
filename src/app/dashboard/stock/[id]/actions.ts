@@ -6,10 +6,18 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { friendlyDbError } from "@/lib/supabase/errors"
 
+/**
+ * Records usage of a stock item against an open job. As of 0009_jobs.sql
+ * this requires picking a real open job — the old free-text "Job number"
+ * field is gone entirely (see that migration's design note and the RLS
+ * policy it replaced). The database is the actual gatekeeper on "job must
+ * still be open" (same policy); this just gives a friendlier message
+ * up front.
+ */
 export async function recordUsage(formData: FormData) {
   const stockItemId = String(formData.get("stock_item_id") ?? "")
   const quantity = Number(formData.get("quantity") ?? 0)
-  const jobNumber = String(formData.get("job_number") ?? "").trim()
+  const jobId = String(formData.get("job_id") ?? "").trim()
 
   const supabase = await createClient()
   // getClaims(), not auth.getUser() — see the note in
@@ -22,10 +30,10 @@ export async function recordUsage(formData: FormData) {
   const claims = data?.claims ?? null
 
   if (!claims) redirect("/login")
-  if (!stockItemId || quantity <= 0 || !jobNumber) {
+  if (!stockItemId || quantity <= 0 || !jobId) {
     redirect(
       `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(
-        "Quantity and job number are required."
+        "Quantity and an open job are required."
       )}`
     )
   }
@@ -34,13 +42,18 @@ export async function recordUsage(formData: FormData) {
     stock_item_id: stockItemId,
     movement_type: "used",
     quantity: -Math.abs(quantity),
-    job_number: jobNumber,
+    job_id: jobId,
     performed_by: claims.sub,
   })
 
   if (error) {
     redirect(
-      `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(friendlyDbError(error))}`
+      `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(
+        friendlyDbError(
+          error,
+          "Could not record usage — the job may have been closed since this page loaded."
+        )
+      )}`
     )
   }
 

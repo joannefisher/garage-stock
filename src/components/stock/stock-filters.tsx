@@ -64,6 +64,21 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
         </div>
 
         <div className="flex flex-col gap-1.5">
+          <Label htmlFor="stock_status">Stock status</Label>
+          <select
+            id="stock_status"
+            name="stock_status"
+            defaultValue={searchParams.get("stock_status") ?? ""}
+            className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          >
+            <option value="">Any</option>
+            <option value="low">Low stock</option>
+            <option value="out">Out of stock</option>
+            <option value="ok">OK</option>
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="supplier_id">Supplier</Label>
           <select
             id="supplier_id"
@@ -78,6 +93,18 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="flex items-center pt-6">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="consignment_only"
+              value="true"
+              defaultChecked={searchParams.get("consignment_only") === "true"}
+            />
+            Consignment only
+          </label>
         </div>
 
         <div className="flex items-end">

@@ -48,14 +48,37 @@ function matchesTypeFilters(item: StockItemWithDetails, params: StockSearchParam
   return true
 }
 
+// Stock status and consignment are generic, cross-type filters — unlike
+// the vehicle/tyre filters above, they don't depend on item_type — so
+// they're applied as a separate pass rather than folded into
+// matchesTypeFilters. Same reason as the type filters: no live project
+// here to verify comparing two columns (quantity_on_hand vs
+// ideal_stock_level) via PostgREST syntax, and it's cheap in-memory work
+// at this catalogue's scale regardless.
+function matchesStockStatus(item: StockItemWithDetails, params: StockSearchParams) {
+  if (params.consignment_only === "true" && !item.is_consignment) return false
+
+  if (params.stock_status === "out" && item.quantity_on_hand > 0) return false
+  if (params.stock_status === "low" && item.quantity_on_hand >= item.ideal_stock_level) {
+    return false
+  }
+  if (params.stock_status === "ok" && item.quantity_on_hand < item.ideal_stock_level) {
+    return false
+  }
+
+  return true
+}
+
 function StatTile({
   label,
   value,
   tone,
+  href,
 }: {
   label: string
   value: string
   tone: "dark" | "primary" | "destructive" | "violet"
+  href?: string
 }) {
   const toneClasses: Record<typeof tone, string> = {
     dark: "bg-tile-dark text-tile-dark-foreground",
@@ -63,11 +86,19 @@ function StatTile({
     destructive: "bg-destructive text-destructive-foreground",
     violet: "bg-violet text-violet-foreground",
   }
-  return (
-    <div className={`flex flex-col gap-1.5 rounded-2xl px-5 py-4 ${toneClasses[tone]}`}>
+  const content = (
+    <>
       <span className="text-[13px] font-semibold opacity-85">{label}</span>
       <span className="font-heading text-3xl font-bold">{value}</span>
-    </div>
+    </>
+  )
+  const className = `flex flex-col gap-1.5 rounded-2xl px-5 py-4 ${toneClasses[tone]}`
+  return href ? (
+    <Link href={href} className={`${className} transition-opacity hover:opacity-90`}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
   )
 }
 
@@ -115,7 +146,9 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
   // PostgREST's `!inner` embedded-filter syntax against. Revisit if the
   // catalogue grows large enough that this needs to move server-side.
   const allItems = (data ?? []) as unknown as StockItemWithDetails[]
-  const items = allItems.filter((item) => matchesTypeFilters(item, searchParams))
+  const items = allItems.filter(
+    (item) => matchesTypeFilters(item, searchParams) && matchesStockStatus(item, searchParams)
+  )
 
   const totalItems = allItems.length
   const lowStockCount = allItems.filter(
@@ -173,9 +206,14 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
         ) : (
           <StatTile label="Types tracked" value="Parts & tyres" tone="primary" />
         )}
-        <StatTile label="Low stock" value={String(lowStockCount)} tone="destructive" />
         <StatTile
-          label="Stock takes this month"
+          label="Low stock"
+          value={String(lowStockCount)}
+          tone="destructive"
+          href="/dashboard/stock?stock_status=low"
+        />
+        <StatTile
+          label="Stocktakes this month"
           value={String(stockTakesThisMonth ?? 0)}
           tone="violet"
         />

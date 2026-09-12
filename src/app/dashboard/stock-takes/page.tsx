@@ -28,7 +28,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Stock takes</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Stocktakes</h1>
           <p className="text-muted-foreground">
             Scan or type stock IDs to count them, then review the discrepancy report. A
             partial count (only scanning some items) works the same way — anything not
@@ -37,7 +37,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
         </div>
         {canManageStock && (
           <form action={startStockTake}>
-            <SubmitButton pendingText="Starting…">Start new stock take</SubmitButton>
+            <SubmitButton pendingText="Starting…">Start new stocktake</SubmitButton>
           </form>
         )}
       </div>
@@ -48,7 +48,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
         </p>
       )}
       {error && (
-        <p className="text-sm text-destructive">Couldn&apos;t load stock takes: {error.message}</p>
+        <p className="text-sm text-destructive">Couldn&apos;t load stocktakes: {error.message}</p>
       )}
 
       <div className="overflow-x-auto rounded-2xl border bg-card">
@@ -98,7 +98,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
             {(stockTakes ?? []).length === 0 && !error && (
               <tr>
                 <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
-                  No stock takes yet.
+                  No stocktakes yet.
                 </td>
               </tr>
             )}

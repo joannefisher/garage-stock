@@ -28,7 +28,7 @@ export async function SiteHeader() {
               </svg>
             </span>
             <span className="font-heading text-lg font-bold tracking-tight">
-              Garage Stock Manager
+              Rivermead Stock Manager
             </span>
           </Link>
           {user && <SiteNav className="hidden sm:flex" />}

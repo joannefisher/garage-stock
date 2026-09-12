@@ -18,6 +18,7 @@ import {
   recordCount,
 } from "../actions"
 import { CancelStockTakeForm } from "./cancel-stock-take-form"
+import { CountedTable } from "./counted-table"
 import { NotCountedTable } from "./not-counted-table"
 import { PrintButton } from "./print-button"
 
@@ -71,7 +72,7 @@ export default async function StockTakeDetailPage(
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Stock take</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Stocktake</h1>
             <Badge variant={inProgress ? "outline" : cancelled ? "destructive" : "secondary"}>
               {statusLabel}
             </Badge>
@@ -151,7 +152,7 @@ export default async function StockTakeDetailPage(
           <form action={completeStockTake}>
             <input type="hidden" name="stock_take_id" value={stockTake.id} />
             <SubmitButton variant="secondary" pendingText="Completing…">
-              Complete stock take
+              Complete stocktake
             </SubmitButton>
           </form>
           <CancelStockTakeForm action={cancelStockTake} stockTakeId={stockTake.id} />
@@ -160,13 +161,13 @@ export default async function StockTakeDetailPage(
 
       {inProgress && !canManageStock && (
         <p className="text-sm text-muted-foreground print:hidden">
-          Only admins and managers can complete or cancel this stock take.
+          Only admins and managers can complete or cancel this stocktake.
         </p>
       )}
 
       {cancelled && (
         <p className="rounded-xl border border-muted-foreground/30 bg-muted p-3 text-sm text-muted-foreground print:hidden">
-          This stock take was cancelled. Counts already recorded are kept below, but no more can
+          This stocktake was cancelled. Counts already recorded are kept below, but no more can
           be added and it can&apos;t be completed.
         </p>
       )}
@@ -188,7 +189,7 @@ export default async function StockTakeDetailPage(
           <CardContent className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
               Everything counted differently than the system expected, worst losses first — the
-              quick way to see what this stock take found without scrolling the full count list.
+              quick way to see what this stocktake found without scrolling the full count list.
             </p>
             <div className="flex flex-wrap gap-4 text-sm">
               <span className="font-medium text-green-700 dark:text-green-400">
@@ -274,85 +275,36 @@ export default async function StockTakeDetailPage(
           <CardTitle>Counted ({counted.length})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="px-2 py-1.5 font-medium">ID</th>
-                <th className="px-2 py-1.5 font-medium">Name</th>
-                <th className="px-2 py-1.5 text-right font-medium">Expected</th>
-                <th className="px-2 py-1.5 text-right font-medium">Counted</th>
-                <th className="px-2 py-1.5 text-right font-medium">Difference</th>
-                <th className="px-2 py-1.5 font-medium">Counted by</th>
-                {canManageStock && <th className="px-2 py-1.5 font-medium print:hidden">Stock level</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {counted.map((c) => (
-                <tr key={c.stock_item_id} className="border-b last:border-0">
-                  <td className="px-2 py-1.5 font-medium">{c.id_number}</td>
-                  <td className="px-2 py-1.5">{c.name}</td>
-                  <td className="px-2 py-1.5 text-right">{c.expected_quantity}</td>
-                  <td className="px-2 py-1.5 text-right">{c.counted_quantity}</td>
-                  <td
-                    className={`px-2 py-1.5 text-right font-medium ${
-                      c.difference !== 0 ? "text-destructive" : "text-muted-foreground"
-                    }`}
-                  >
-                    {c.difference > 0 ? `+${c.difference}` : c.difference}
-                  </td>
-                  <td className="px-2 py-1.5 text-muted-foreground">
-                    {c.counted_by_name ?? "—"}
-                  </td>
-                  {canManageStock && (
-                    <td className="px-2 py-1.5 print:hidden">
-                      {c.difference === 0 ? (
-                        <span className="text-xs text-muted-foreground">Matched</span>
-                      ) : c.reconciled_at ? (
-                        <Badge variant="secondary">Updated</Badge>
-                      ) : cancelled ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
-                        <form action={applyStockTakeCount}>
-                          <input type="hidden" name="stock_take_id" value={stockTake.id} />
-                          <input
-                            type="hidden"
-                            name="stock_take_count_id"
-                            value={c.stock_take_count_id}
-                          />
-                          <SubmitButton size="sm" variant="outline" pendingText="Updating…">
-                            Update stock level
-                          </SubmitButton>
-                        </form>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {counted.length === 0 && (
-                <tr>
-                  <td colSpan={canManageStock ? 7 : 6} className="px-2 py-6 text-center text-muted-foreground">
-                    Nothing counted yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Not yet counted ({missing.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <NotCountedTable
-            items={missing}
+          <CountedTable
+            items={counted}
+            canManageStock={canManageStock}
+            cancelled={cancelled}
             stockTakeId={stockTake.id}
-            recordCountAction={recordCount}
-            canCapture={inProgress}
+            applyAction={applyStockTakeCount}
           />
         </CardContent>
       </Card>
+
+      {/* Once a stocktake is completed, "not yet counted" is no longer
+          useful to list — it's frozen and can't be acted on any further,
+          so the completed report only needs what was actually counted and
+          checked. Still shown while in progress (it's the to-do list) and
+          when cancelled (context for how much was left when it stopped). */}
+      {stockTake.status !== "completed" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Not yet counted ({missing.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <NotCountedTable
+              items={missing}
+              stockTakeId={stockTake.id}
+              recordCountAction={recordCount}
+              canCapture={inProgress}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

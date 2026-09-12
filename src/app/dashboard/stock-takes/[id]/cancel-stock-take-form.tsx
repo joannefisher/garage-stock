@@ -21,7 +21,7 @@ export function CancelStockTakeForm({
       onSubmit={(e) => {
         if (
           !window.confirm(
-            "Cancel this stock take? Counts recorded so far are kept, but no more counts can be recorded and it can't be completed afterwards."
+            "Cancel this stocktake? Counts recorded so far are kept, but no more counts can be recorded and it can't be completed afterwards."
           )
         ) {
           e.preventDefault()
@@ -30,7 +30,7 @@ export function CancelStockTakeForm({
     >
       <input type="hidden" name="stock_take_id" value={stockTakeId} />
       <SubmitButton variant="outline" pendingText="Cancelling…">
-        Cancel stock take
+        Cancel stocktake
       </SubmitButton>
     </form>
   )

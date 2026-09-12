@@ -12,6 +12,30 @@ const PAGE_BOTTOM = 792 - PAGE_MARGIN // A4-ish (points), leaves room before the
 
 type Column = { header: string; width: number; align?: "left" | "right" }
 
+const ROW_PADDING = 5 // extra vertical breathing room below each row's text
+const COLUMN_GAP = 8 // horizontal gap reserved at the end of each column, so a
+// right-aligned value (e.g. "Diff") doesn't sit flush against the next
+// column's text (e.g. "Applied") — without this they visually run
+// together as "DiffApplied".
+
+/**
+ * Draws a simple table. Rewritten Sept 2026 — the previous version had
+ * two alignment bugs that made real reports look broken:
+ *
+ * 1. The header row printed each column via `doc.text(header, x, doc.y,
+ *    ...)`, re-reading `doc.y` on every iteration. `.text()` advances
+ *    `doc.y` after printing, so each header column landed a line lower
+ *    than the last — headers staircased down the page instead of forming
+ *    a row. Fixed by printing every header at one fixed `headerY`.
+ * 2. Data rows used a fixed `rowY`, so columns within a row *did* line up
+ *    with each other — but a long name (common for real stock items/tyre
+ *    descriptions) wraps to 2-3 lines at these column widths, and the
+ *    fixed `doc.moveDown(1.1)` step to the next row didn't account for
+ *    that — the next row started before the wrapped text finished and
+ *    overlapped it. Fixed by capping every cell to a single line with
+ *    `height` + `ellipsis: true` (truncates with "…" instead of
+ *    wrapping), so every row has the same, predictable height.
+ */
 function drawTable(
   doc: PDFKit.PDFDocument,
   columns: Column[],
@@ -19,18 +43,25 @@ function drawTable(
   emptyMessage: string
 ) {
   const startX = doc.page.margins.left
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0)
 
   function drawHeader() {
     doc.font("Helvetica-Bold").fontSize(9)
+    const headerY = doc.y
+    const lineHeight = doc.currentLineHeight()
     let x = startX
     for (const col of columns) {
-      doc.text(col.header, x, doc.y, { width: col.width, align: col.align ?? "left" })
+      doc.text(col.header, x, headerY, {
+        width: col.width - COLUMN_GAP,
+        align: col.align ?? "left",
+        lineBreak: false,
+      })
       x += col.width
     }
-    doc.moveDown(0.4)
+    doc.y = headerY + lineHeight + 4
     doc
       .moveTo(startX, doc.y)
-      .lineTo(startX + columns.reduce((sum, c) => sum + c.width, 0), doc.y)
+      .lineTo(startX + tableWidth, doc.y)
       .strokeColor("#cccccc")
       .stroke()
     doc.moveDown(0.3)
@@ -38,6 +69,8 @@ function drawTable(
 
   drawHeader()
   doc.font("Helvetica").fontSize(9)
+  const rowLineHeight = doc.currentLineHeight()
+  const rowHeight = rowLineHeight + ROW_PADDING
 
   if (rows.length === 0) {
     doc.fillColor("#666666").text(emptyMessage, startX, doc.y)
@@ -47,7 +80,7 @@ function drawTable(
   }
 
   for (const row of rows) {
-    if (doc.y > PAGE_BOTTOM) {
+    if (doc.y + rowHeight > PAGE_BOTTOM) {
       doc.addPage()
       drawHeader()
       doc.font("Helvetica").fontSize(9)
@@ -55,11 +88,15 @@ function drawTable(
     const rowY = doc.y
     let x = startX
     for (let i = 0; i < columns.length; i++) {
-      doc.text(row[i] ?? "", x, rowY, { width: columns[i].width, align: columns[i].align ?? "left" })
+      doc.text(row[i] ?? "", x, rowY, {
+        width: columns[i].width - COLUMN_GAP,
+        align: columns[i].align ?? "left",
+        height: rowLineHeight,
+        ellipsis: true,
+      })
       x += columns[i].width
     }
-    doc.y = rowY
-    doc.moveDown(1.1)
+    doc.y = rowY + rowHeight
   }
   doc.moveDown(0.4)
 }
@@ -83,13 +120,13 @@ function buildPdf(
     doc.on("end", () => resolve(Buffer.concat(chunks)))
     doc.on("error", reject)
 
-    doc.font("Helvetica-Bold").fontSize(18).text("Stock Take Report")
+    doc.font("Helvetica-Bold").fontSize(18).text("Stocktake Report")
     doc.moveDown(0.3)
     doc
       .font("Helvetica")
       .fontSize(10)
       .fillColor("#444444")
-      .text(`Stock take ID: ${stockTake.id}`)
+      .text(`Stocktake ID: ${stockTake.id}`)
       .text(
         `Status: ${
           stockTake.status === "in_progress"
@@ -186,19 +223,25 @@ function buildPdf(
       "Nothing counted yet."
     )
 
-    doc.moveDown(0.6)
-    doc.font("Helvetica-Bold").fontSize(13).text(`Not yet counted (${missing.length})`)
-    doc.moveDown(0.4)
-    drawTable(
-      doc,
-      [
-        { header: "ID", width: 110 },
-        { header: "Name", width: 280 },
-        { header: "System quantity", width: 120, align: "right" },
-      ],
-      missing.map((m) => [m.id_number, m.name, String(m.quantity_on_hand)]),
-      "Every active stock item has been counted."
-    )
+    // Once a stocktake is completed, "not yet counted" is frozen and no
+    // longer actionable — the completed report only needs to show what
+    // was actually counted and checked. Still included while in progress
+    // (it's the to-do list) or cancelled (context for what was left).
+    if (stockTake.status !== "completed") {
+      doc.moveDown(0.6)
+      doc.font("Helvetica-Bold").fontSize(13).text(`Not yet counted (${missing.length})`)
+      doc.moveDown(0.4)
+      drawTable(
+        doc,
+        [
+          { header: "ID", width: 110 },
+          { header: "Name", width: 280 },
+          { header: "System quantity", width: 120, align: "right" },
+        ],
+        missing.map((m) => [m.id_number, m.name, String(m.quantity_on_hand)]),
+        "Every active stock item has been counted."
+      )
+    }
 
     doc.end()
   })
@@ -212,7 +255,7 @@ export async function GET(
   const report = await getStockTakeReport(id)
 
   if (!report) {
-    return new Response("Stock take not found", { status: 404 })
+    return new Response("Stocktake not found", { status: 404 })
   }
 
   const pdfBuffer = await buildPdf(report.stockTake, report.counted, report.missing)
@@ -220,7 +263,7 @@ export async function GET(
   return new Response(new Uint8Array(pdfBuffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="stock-take-${report.stockTake.id}.pdf"`,
+      "Content-Disposition": `attachment; filename="stocktake-${report.stockTake.id}.pdf"`,
       "Content-Length": String(pdfBuffer.byteLength),
     },
   })

@@ -14,7 +14,7 @@ const QUICK_LINKS = [
   },
   {
     href: "/dashboard/stock-takes",
-    label: "Stock takes",
+    label: "Stocktakes",
     description: "Run a scan-and-count session and reconcile the results.",
     tone: "violet" as const,
     icon: (
@@ -49,7 +49,7 @@ export default async function DashboardPage() {
           {firstName ? `Welcome back, ${capitalize(firstName)}` : "Overview"}
         </h1>
         <p className="text-[15px] font-medium text-muted-foreground">
-          Jump into stock, a stock take, or a vehicle lookup.
+          Jump into stock, a stocktake, or a vehicle lookup.
         </p>
       </div>
 

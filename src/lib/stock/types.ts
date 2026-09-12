@@ -15,6 +15,8 @@ export interface StockSearchParams {
   q?: string
   item_type?: "part" | "tyre"
   supplier_id?: string
+  stock_status?: "low" | "out" | "ok"
+  consignment_only?: string
   vehicle_make?: string
   vehicle_model?: string
   tyre_width?: string

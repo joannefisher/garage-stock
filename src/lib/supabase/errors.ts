@@ -35,7 +35,7 @@ const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
   vehicle_model_fitments_vehicle_model_id_stock_item_id_key:
     "That part is already listed as a fitment for this vehicle model.",
   stock_take_counts_stock_take_id_stock_item_id_key:
-    "That item has already been counted in this stock take — recording again will update it instead.",
+    "That item has already been counted in this stocktake — recording again will update it instead.",
 }
 
 const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {

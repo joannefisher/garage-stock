@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils"
 const NAV_LINKS = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/stock", label: "Stock" },
-  { href: "/dashboard/stock-takes", label: "Stock takes" },
+  { href: "/dashboard/jobs", label: "Jobs" },
+  { href: "/dashboard/stock-takes", label: "Stocktakes" },
   { href: "/dashboard/vehicles", label: "Vehicles" },
 ] as const
 

@@ -24,8 +24,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Garage Stock Manager",
-  description: "Parts and tyres stock management for the garage",
+  title: "Rivermead Stock Manager",
+  description: "Parts and tyres stock management for Rivermead",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

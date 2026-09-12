@@ -33,7 +33,7 @@ export async function startStockTake() {
   if (!staff.canManageStock) {
     redirect(
       `/dashboard/stock-takes?error=${encodeURIComponent(
-        "Only admins and managers can start a stock take."
+        "Only admins and managers can start a stocktake."
       )}`
     )
   }
@@ -47,7 +47,7 @@ export async function startStockTake() {
   if (error || !data) {
     redirect(
       `/dashboard/stock-takes?error=${encodeURIComponent(
-        friendlyDbError(error, "Could not start a stock take.")
+        friendlyDbError(error, "Could not start a stocktake.")
       )}`
     )
   }
@@ -113,9 +113,9 @@ export async function recordCount(formData: FormData) {
 
   const claims = claimsData?.claims ?? null
   if (!claims) redirect("/login")
-  if (!stockTake) fail("Stock take not found.")
+  if (!stockTake) fail("Stocktake not found.")
   if (stockTake?.status !== "in_progress") {
-    fail("This stock take is already completed — counts can no longer be recorded.")
+    fail("This stocktake is already completed — counts can no longer be recorded.")
   }
 
   if (!stockItem) {
@@ -174,19 +174,19 @@ export async function completeStockTake(formData: FormData) {
   ])
   if (!staff) redirect("/login")
   if (!staff.canManageStock) {
-    fail("Only admins and managers can complete a stock take.")
+    fail("Only admins and managers can complete a stocktake.")
     return
   }
 
   if (!stockTake) {
-    fail("Stock take not found.")
+    fail("Stocktake not found.")
     return
   }
   if (stockTake.status !== "in_progress") {
     fail(
       stockTake.status === "completed"
-        ? "This stock take is already completed."
-        : "This stock take was cancelled and can't be completed."
+        ? "This stocktake is already completed."
+        : "This stocktake was cancelled and can't be completed."
     )
     return
   }
@@ -231,19 +231,19 @@ export async function cancelStockTake(formData: FormData) {
   ])
   if (!staff) redirect("/login")
   if (!staff.canManageStock) {
-    fail("Only admins and managers can cancel a stock take.")
+    fail("Only admins and managers can cancel a stocktake.")
     return
   }
 
   if (!stockTake) {
-    fail("Stock take not found.")
+    fail("Stocktake not found.")
     return
   }
   if (stockTake.status !== "in_progress") {
     fail(
       stockTake.status === "completed"
-        ? "This stock take is already completed and can't be cancelled."
-        : "This stock take is already cancelled."
+        ? "This stocktake is already completed and can't be cancelled."
+        : "This stocktake is already cancelled."
     )
     return
   }
@@ -313,7 +313,7 @@ async function reconcileStockTakeCount(
         quantity: delta,
         performed_by: userId,
         stock_take_id: stockTakeId,
-        notes: `Stock take reconciliation (counted ${count.counted_quantity})`,
+        notes: `Stocktake reconciliation (counted ${count.counted_quantity})`,
       })
       .select("id")
       .single()
@@ -364,7 +364,7 @@ export async function applyStockTakeCount(formData: FormData) {
   ])
   if (!staff) redirect("/login")
   if (!staff.canManageStock) {
-    fail("Only admins and managers can update stock levels from a stock take.")
+    fail("Only admins and managers can update stock levels from a stocktake.")
     return
   }
 
@@ -409,7 +409,7 @@ export async function applyAllStockTakeDiscrepancies(formData: FormData) {
   ])
   if (!staff) redirect("/login")
   if (!staff.canManageStock) {
-    fail("Only admins and managers can update stock levels from a stock take.")
+    fail("Only admins and managers can update stock levels from a stocktake.")
     return
   }
 

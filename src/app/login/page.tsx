@@ -24,7 +24,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
           <CardDescription>
-            Staff sign-in for the garage stock system.
+            Staff sign-in for Rivermead&apos;s stock system.
           </CardDescription>
         </CardHeader>
         <CardContent>

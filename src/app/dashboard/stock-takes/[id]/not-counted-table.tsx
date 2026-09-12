@@ -40,35 +40,51 @@ export function NotCountedTable({
   recordCountAction: (formData: FormData) => void
   canCapture: boolean
 }) {
+  const [query, setQuery] = useState("")
   const [onlyInStock, setOnlyInStock] = useState(false)
 
   const inStockCount = useMemo(
     () => items.filter((m) => m.quantity_on_hand > 0).length,
     [items]
   )
-  const visible = useMemo(
-    () => (onlyInStock ? items.filter((m) => m.quantity_on_hand > 0) : items),
-    [items, onlyInStock]
-  )
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return items.filter((m) => {
+      if (onlyInStock && m.quantity_on_hand <= 0) return false
+      if (q && !m.id_number.toLowerCase().includes(q) && !m.name.toLowerCase().includes(q)) {
+        return false
+      }
+      return true
+    })
+  }, [items, query, onlyInStock])
 
   return (
     <>
       {items.length > 0 && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <div className="mb-3 flex flex-col gap-3 print:hidden">
           <p className="text-sm text-muted-foreground">
             These weren&apos;t scanned, so there&apos;s no counted quantity on file yet
             {canCapture
               ? " — scan one above, or record what you actually found straight from a row below."
               : " — scan them to include them, or correct one by hand from its stock item page if you already know the real figure."}
           </p>
-          <label className="flex shrink-0 items-center gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
             <input
-              type="checkbox"
-              checked={onlyInStock}
-              onChange={(e) => setOnlyInStock(e.target.checked)}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search ID or name…"
+              className="border-input h-9 w-56 rounded-xl border-[1.5px] bg-card px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             />
-            Only items expected in stock ({inStockCount})
-          </label>
+            <label className="flex shrink-0 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={onlyInStock}
+                onChange={(e) => setOnlyInStock(e.target.checked)}
+              />
+              Only items expected in stock ({inStockCount})
+            </label>
+          </div>
         </div>
       )}
       <table className="w-full text-sm">

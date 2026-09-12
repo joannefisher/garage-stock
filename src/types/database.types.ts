@@ -1,5 +1,5 @@
 /**
- * Hand-written types matching supabase/migrations/0001-0008.
+ * Hand-written types matching supabase/migrations/0001-0009.
  *
  * Once your Supabase project is linked, regenerate the real (guaranteed
  * accurate) types and replace this file entirely:
@@ -40,6 +40,7 @@ export type PurchaseOrderStatus =
   | "cancelled"
 export type SupplierReturnStatus = "draft" | "sent" | "credited"
 export type StockTakeStatus = "in_progress" | "completed" | "cancelled"
+export type JobStatus = "open" | "closed"
 
 // ---------------------------------------------------------------------
 // profiles (0001_init.sql)
@@ -200,7 +201,13 @@ export type StockMovementRow = {
   stock_item_id: string
   movement_type: StockMovementType
   quantity: number
+  // Legacy free-text field, pre-0009 — left null on new 'used' rows,
+  // which now go through job_id instead. Still populated on old rows.
   job_number: string | null
+  // Set on 'used' movements recorded from a job (0009_jobs.sql). RLS
+  // requires this to reference a still-open job for new inserts — see
+  // that migration's "Staff can record stock usage" policy.
+  job_id: string | null
   purchase_order_id: string | null
   supplier_return_id: string | null
   // Set on 'adjustment' movements written by stock take reconciliation
@@ -218,6 +225,7 @@ export type StockMovementInsert = {
   movement_type: StockMovementType
   quantity: number
   job_number?: string | null
+  job_id?: string | null
   purchase_order_id?: string | null
   supplier_return_id?: string | null
   stock_take_id?: string | null
@@ -466,6 +474,38 @@ export type VehicleModelFitmentInsert = {
 export type VehicleModelFitmentUpdate = Partial<VehicleModelFitmentInsert>
 
 // ---------------------------------------------------------------------
+// jobs (0009_jobs.sql)
+// ---------------------------------------------------------------------
+
+export type JobRow = {
+  id: string
+  job_number: string
+  vehicle_registration: string | null
+  vehicle_id: string | null
+  notes: string | null
+  status: JobStatus
+  created_by: string | null
+  created_at: string
+  closed_by: string | null
+  closed_at: string | null
+  updated_at: string
+}
+export type JobInsert = {
+  id?: string
+  job_number: string
+  vehicle_registration?: string | null
+  vehicle_id?: string | null
+  notes?: string | null
+  status?: JobStatus
+  created_by?: string | null
+  created_at?: string
+  closed_by?: string | null
+  closed_at?: string | null
+  updated_at?: string
+}
+export type JobUpdate = Partial<JobInsert>
+
+// ---------------------------------------------------------------------
 // Views (read-only)
 // ---------------------------------------------------------------------
 
@@ -608,6 +648,12 @@ export type Database = {
         Update: VehicleModelFitmentUpdate
         Relationships: []
       }
+      jobs: {
+        Row: JobRow
+        Insert: JobInsert
+        Update: JobUpdate
+        Relationships: []
+      }
     }
     Views: {
       v_reorder_report: { Row: ReorderReportRow; Relationships: [] }
@@ -627,6 +673,7 @@ export type Database = {
       purchase_order_status: PurchaseOrderStatus
       supplier_return_status: SupplierReturnStatus
       stock_take_status: StockTakeStatus
+      job_status: JobStatus
     }
   }
 }

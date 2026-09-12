@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { Badge } from "@/components/ui/badge"
@@ -8,8 +9,16 @@ import { SubmitButton } from "@/components/ui/submit-button"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockItemWithDetails } from "@/lib/stock/types"
+import type { StockMovementRow } from "@/types/database.types"
 
 import { recordAdjustment, recordUsage } from "./actions"
+
+// Supabase client typing degrades an embedded-resource select (`jobs(...)`)
+// to `never` here — same cause as StockItemWithDetails above
+// (Relationships: [] in the hand-maintained database.types.ts, see the
+// comment on that file). Cast through this explicit shape rather than
+// `as unknown as` scattered at each access.
+type MovementWithJob = StockMovementRow & { jobs: { job_number: string } | null }
 
 export default async function StockItemPage(props: PageProps<"/dashboard/stock/[id]">) {
   const { id } = await props.params
@@ -18,10 +27,11 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
 
   const supabase = await createClient()
 
-  // getCurrentStaff() and the two item/movements queries don't depend on
-  // each other, so they run as one parallel wave rather than three
-  // sequential round-trips. See the perf note in CLAUDE.md.
-  const [staff, { data: item }, { data: movements }] = await Promise.all([
+  // getCurrentStaff(), the item, its recent movements, and the list of
+  // open jobs to record usage against are all independent reads — they
+  // run as one parallel wave rather than four sequential round-trips. See
+  // the perf note in CLAUDE.md.
+  const [staff, { data: item }, { data: movements }, { data: openJobs }] = await Promise.all([
     getCurrentStaff(),
     supabase
       .from("stock_items")
@@ -30,10 +40,15 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
       .maybeSingle(),
     supabase
       .from("stock_movements")
-      .select("*")
+      .select("*, jobs(job_number)")
       .eq("stock_item_id", id)
       .order("created_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("jobs")
+      .select("id, job_number, vehicle_registration")
+      .eq("status", "open")
+      .order("created_at", { ascending: false }),
   ])
   const canManageStock = staff?.canManageStock ?? false
 
@@ -132,20 +147,46 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
             <CardTitle>Record usage</CardTitle>
           </CardHeader>
           <CardContent>
-            <form action={recordUsage} className="flex flex-col gap-3">
-              <input type="hidden" name="stock_item_id" value={stockItem.id} />
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="usage_quantity">Quantity used</Label>
-                <Input id="usage_quantity" name="quantity" type="number" min="1" defaultValue="1" required />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="job_number">Job number</Label>
-                <Input id="job_number" name="job_number" required />
-              </div>
-              <SubmitButton variant="secondary" pendingText="Removing…">
-                Remove from stock
-              </SubmitButton>
-            </form>
+            {(openJobs ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No open jobs — usage must be recorded against a job now.{" "}
+                <Link href="/dashboard/jobs/new" className="font-medium underline-offset-4 hover:underline">
+                  Open one
+                </Link>{" "}
+                first.
+              </p>
+            ) : (
+              <form action={recordUsage} className="flex flex-col gap-3">
+                <input type="hidden" name="stock_item_id" value={stockItem.id} />
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="usage_quantity">Quantity used</Label>
+                  <Input id="usage_quantity" name="quantity" type="number" min="1" defaultValue="1" required />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="job_id">Job</Label>
+                  <select
+                    id="job_id"
+                    name="job_id"
+                    required
+                    defaultValue=""
+                    className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  >
+                    <option value="" disabled>
+                      Select an open job…
+                    </option>
+                    {(openJobs ?? []).map((job) => (
+                      <option key={job.id} value={job.id}>
+                        {job.job_number}
+                        {job.vehicle_registration ? ` — ${job.vehicle_registration}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <SubmitButton variant="secondary" pendingText="Removing…">
+                  Remove from stock
+                </SubmitButton>
+              </form>
+            )}
           </CardContent>
         </Card>
 
@@ -192,14 +233,25 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
               </tr>
             </thead>
             <tbody>
-              {(movements ?? []).map((m) => (
+              {((movements ?? []) as unknown as MovementWithJob[]).map((m) => (
                 <tr key={m.id} className="border-b last:border-0">
                   <td className="px-2 py-1.5 whitespace-nowrap">
                     {new Date(m.created_at).toLocaleString("en-GB")}
                   </td>
                   <td className="px-2 py-1.5">{m.movement_type}</td>
                   <td className="px-2 py-1.5 text-right">{m.quantity}</td>
-                  <td className="px-2 py-1.5">{m.job_number ?? "—"}</td>
+                  <td className="px-2 py-1.5">
+                    {m.job_id ? (
+                      <Link
+                        href={`/dashboard/jobs/${m.job_id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {m.jobs?.job_number ?? "—"}
+                      </Link>
+                    ) : (
+                      m.job_number ?? "—"
+                    )}
+                  </td>
                   <td className="px-2 py-1.5 text-muted-foreground">{m.notes ?? "—"}</td>
                 </tr>
               ))}
