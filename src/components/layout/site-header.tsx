@@ -1,7 +1,7 @@
 import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { SubmitButton } from "@/components/ui/submit-button"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { logout } from "@/app/login/actions"
 import { SiteNav } from "@/components/layout/site-nav"
@@ -42,9 +42,9 @@ export async function SiteHeader() {
               </Badge>
             )}
             <form action={logout}>
-              <Button type="submit" variant="outline" size="sm">
+              <SubmitButton variant="outline" size="sm" pendingText="Signing out…">
                 Sign out
-              </Button>
+              </SubmitButton>
             </form>
           </div>
         )}

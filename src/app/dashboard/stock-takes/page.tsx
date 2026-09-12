@@ -1,7 +1,7 @@
 import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { SubmitButton } from "@/components/ui/submit-button"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 
@@ -37,7 +37,7 @@ export default async function StockTakesPage(props: PageProps<"/dashboard/stock-
         </div>
         {canManageStock && (
           <form action={startStockTake}>
-            <Button type="submit">Start new stock take</Button>
+            <SubmitButton pendingText="Starting…">Start new stock take</SubmitButton>
           </form>
         )}
       </div>

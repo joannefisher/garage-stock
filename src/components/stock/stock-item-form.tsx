@@ -2,9 +2,9 @@
 
 import { useState } from "react"
 
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SubmitButton } from "@/components/ui/submit-button"
 import { ScannableIdInput } from "@/components/scan/scannable-id-input"
 
 interface SupplierOption {
@@ -207,7 +207,7 @@ export function StockItemForm({
       )}
 
       <div className="flex justify-end gap-2">
-        <Button type="submit">Save stock item</Button>
+        <SubmitButton pendingText="Saving…">Save stock item</SubmitButton>
       </div>
     </form>
   )

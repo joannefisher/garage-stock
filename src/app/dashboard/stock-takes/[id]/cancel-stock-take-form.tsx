@@ -1,6 +1,6 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { SubmitButton } from "@/components/ui/submit-button"
 
 /**
  * Cancelling isn't reversible from the UI (no "un-cancel" screen), so —
@@ -29,9 +29,9 @@ export function CancelStockTakeForm({
       }}
     >
       <input type="hidden" name="stock_take_id" value={stockTakeId} />
-      <Button type="submit" variant="outline">
+      <SubmitButton variant="outline" pendingText="Cancelling…">
         Cancel stock take
-      </Button>
+      </SubmitButton>
     </form>
   )
 }

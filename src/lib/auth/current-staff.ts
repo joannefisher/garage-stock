@@ -33,32 +33,47 @@ export type CurrentStaff = {
  * Wrapped in React's `cache()` so multiple calls within the same request
  * render (e.g. the shared SiteHeader in the dashboard layout AND the page
  * component it wraps both calling this) reuse one result instead of each
- * making their own `auth.getUser()` + `profiles` round-trip — this was
- * found to be doubling the auth cost of every dashboard page load (Sept
- * 2026 performance pass, see CLAUDE.md). `cache()` only dedupes within a
- * single request/render pass, so a Server Action (a separate request) or
- * the next page navigation still gets a fresh, correctly-revalidated call.
+ * making their own auth check + `profiles` round-trip — this was found to
+ * be doubling the auth cost of every dashboard page load (Sept 2026
+ * performance pass, see CLAUDE.md). `cache()` only dedupes within a single
+ * request/render pass, so a Server Action (a separate request) or the
+ * next page navigation still gets a fresh, correctly-revalidated call.
+ *
+ * Uses `getClaims()`, not `auth.getUser()`: this project's JWTs are signed
+ * with an asymmetric key (ES256), so `getClaims()` verifies the token
+ * locally (via the cached JWKS, no network round trip) instead of always
+ * calling the Auth server — per Joanne's explicit sign-off (Sept 2026,
+ * see CLAUDE.md's "record creation is slow" note) after the trade-off was
+ * flagged: a revoked/banned user's session keeps working until the JWT's
+ * natural expiry (it's a short-lived access token, refreshed periodically)
+ * rather than being cut off on the next request. If your project ever
+ * moves back to a symmetric (HS256) signing key, `getClaims()` silently
+ * falls back to a server round trip anyway — no code change needed, just
+ * slower again.
  */
 export const getCurrentStaff = cache(async (): Promise<CurrentStaff | null> => {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // `data` itself (not just `data.claims`) is nullable on error — unlike
+  // `getUser()`'s always-present `{ user: User | null }` shape — so this
+  // reads `data?.claims` rather than destructuring `claims` straight off
+  // `data`, which doesn't type-check against the null branch.
+  const { data } = await supabase.auth.getClaims()
+  const claims = data?.claims ?? null
 
-  if (!user) return null
+  if (!claims) return null
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, role")
-    .eq("id", user.id)
+    .eq("id", claims.sub)
     .single()
 
   const role: StaffRole = profile?.role ?? "mechanic"
 
   return {
-    id: user.id,
-    email: user.email ?? null,
-    fullName: profile?.full_name ?? user.email ?? "Unknown",
+    id: claims.sub,
+    email: claims.email ?? null,
+    fullName: profile?.full_name ?? claims.email ?? "Unknown",
     role,
     canManageStock: role === "admin" || role === "manager",
     isAdmin: role === "admin",

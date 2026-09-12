@@ -113,14 +113,53 @@ function buildPdf(
     doc.fillColor("#000000")
     doc.moveDown(1)
 
-    const discrepancies = counted.filter((c) => c.difference !== 0).length
+    const discrepancyLines = counted.filter((c) => c.difference !== 0)
     doc
       .font("Helvetica-Bold")
       .fontSize(11)
       .text(
-        `Counted: ${counted.length}    Discrepancies: ${discrepancies}    Not yet counted: ${missing.length}`
+        `Counted: ${counted.length}    Discrepancies: ${discrepancyLines.length}    Not yet counted: ${missing.length}`
       )
     doc.moveDown(0.8)
+
+    // Adjustments: just the discrepancies, worst losses first, with a
+    // gained/lost/net summary — the "easy to review" cut of the same
+    // data the Counted table below has, for when all that's wanted is
+    // what this stock take found rather than the full count list.
+    if (discrepancyLines.length > 0) {
+      const sorted = [...discrepancyLines].sort((a, b) => a.difference - b.difference)
+      const totalGained = sorted.filter((c) => c.difference > 0).reduce((s, c) => s + c.difference, 0)
+      const totalLost = sorted.filter((c) => c.difference < 0).reduce((s, c) => s + c.difference, 0)
+
+      doc.font("Helvetica-Bold").fontSize(13).text(`Stock adjustments (${sorted.length})`)
+      doc.moveDown(0.2)
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .text(`Gained: +${totalGained}    Lost: ${totalLost}    Net: ${totalGained + totalLost > 0 ? "+" : ""}${totalGained + totalLost}`)
+      doc.moveDown(0.4)
+      drawTable(
+        doc,
+        [
+          { header: "ID", width: 80 },
+          { header: "Name", width: 160 },
+          { header: "Expected", width: 60, align: "right" },
+          { header: "Counted", width: 60, align: "right" },
+          { header: "Diff", width: 50, align: "right" },
+          { header: "Applied", width: 55 },
+        ],
+        sorted.map((c) => [
+          c.id_number,
+          c.name,
+          String(c.expected_quantity),
+          String(c.counted_quantity),
+          c.difference > 0 ? `+${c.difference}` : String(c.difference),
+          c.reconciled_at ? "Yes" : "Not yet",
+        ]),
+        "No discrepancies."
+      )
+      doc.moveDown(0.6)
+    }
 
     doc.font("Helvetica-Bold").fontSize(13).text(`Counted (${counted.length})`)
     doc.moveDown(0.4)

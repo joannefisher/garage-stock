@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
+import { friendlyDbError } from "@/lib/supabase/errors"
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim()
@@ -87,7 +88,7 @@ export async function saveVehicleLookup(formData: FormData) {
         redirect(
           `/dashboard/vehicles?registration=${encodeURIComponent(
             registration
-          )}&error=${encodeURIComponent(modelError.message)}`
+          )}&error=${encodeURIComponent(friendlyDbError(modelError))}`
         )
       }
       vehicleModelId = newModel?.id ?? null
@@ -108,7 +109,7 @@ export async function saveVehicleLookup(formData: FormData) {
     redirect(
       `/dashboard/vehicles?registration=${encodeURIComponent(
         registration
-      )}&error=${encodeURIComponent(vehicleError.message)}`
+      )}&error=${encodeURIComponent(friendlyDbError(vehicleError))}`
     )
   }
 

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SubmitButton } from "@/components/ui/submit-button"
 import { ScannableIdInput } from "@/components/scan/scannable-id-input"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { getStockTakeReport } from "@/lib/stock-takes/report"
@@ -17,6 +18,7 @@ import {
   recordCount,
 } from "../actions"
 import { CancelStockTakeForm } from "./cancel-stock-take-form"
+import { NotCountedTable } from "./not-counted-table"
 import { PrintButton } from "./print-button"
 
 type StockTakeDetailSearchParams = {
@@ -45,6 +47,18 @@ export default async function StockTakeDetailPage(
   const discrepancies = counted.filter((c) => c.difference !== 0)
   const discrepancyCount = discrepancies.length
   const outstandingDiscrepancies = discrepancies.filter((c) => !c.reconciled_at)
+  // Adjustments report (below): worst losses first, so the items most
+  // worth a second look surface at the top rather than being buried
+  // alphabetically among everything that matched.
+  const sortedDiscrepancies = [...discrepancies].sort((a, b) => a.difference - b.difference)
+  const totalGained = discrepancies
+    .filter((c) => c.difference > 0)
+    .reduce((sum, c) => sum + c.difference, 0)
+  const totalLost = discrepancies
+    .filter((c) => c.difference < 0)
+    .reduce((sum, c) => sum + c.difference, 0)
+  const gainCount = discrepancies.filter((c) => c.difference > 0).length
+  const lossCount = discrepancies.filter((c) => c.difference < 0).length
   const statusLabel =
     stockTake.status === "in_progress"
       ? "In progress"
@@ -126,7 +140,7 @@ export default async function StockTakeDetailPage(
                   className="w-32"
                 />
               </div>
-              <Button type="submit">Record count</Button>
+              <SubmitButton pendingText="Recording…">Record count</SubmitButton>
             </form>
           </CardContent>
         </Card>
@@ -136,9 +150,9 @@ export default async function StockTakeDetailPage(
         <div className="flex flex-wrap gap-2 print:hidden">
           <form action={completeStockTake}>
             <input type="hidden" name="stock_take_id" value={stockTake.id} />
-            <Button type="submit" variant="secondary">
+            <SubmitButton variant="secondary" pendingText="Completing…">
               Complete stock take
-            </Button>
+            </SubmitButton>
           </form>
           <CancelStockTakeForm action={cancelStockTake} stockTakeId={stockTake.id} />
         </div>
@@ -163,6 +177,75 @@ export default async function StockTakeDetailPage(
         <SummaryStat label="Not yet counted" value={missing.length} />
       </div>
 
+      {discrepancyCount > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Stock adjustments — {discrepancyCount} discrepanc
+              {discrepancyCount === 1 ? "y" : "ies"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">
+              Everything counted differently than the system expected, worst losses first — the
+              quick way to see what this stock take found without scrolling the full count list.
+            </p>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span className="font-medium text-green-700 dark:text-green-400">
+                Gained: +{totalGained} across {gainCount} item{gainCount === 1 ? "" : "s"}
+              </span>
+              <span className="font-medium text-destructive">
+                Lost: {totalLost} across {lossCount} item{lossCount === 1 ? "" : "s"}
+              </span>
+              <span className="font-medium text-muted-foreground">
+                Net: {totalGained + totalLost > 0 ? "+" : ""}
+                {totalGained + totalLost}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="px-2 py-1.5 font-medium">ID</th>
+                    <th className="px-2 py-1.5 font-medium">Name</th>
+                    <th className="px-2 py-1.5 text-right font-medium">Expected</th>
+                    <th className="px-2 py-1.5 text-right font-medium">Counted</th>
+                    <th className="px-2 py-1.5 text-right font-medium">Difference</th>
+                    <th className="px-2 py-1.5 font-medium print:hidden">Applied to stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedDiscrepancies.map((c) => (
+                    <tr key={c.stock_take_count_id} className="border-b last:border-0">
+                      <td className="px-2 py-1.5 font-medium">{c.id_number}</td>
+                      <td className="px-2 py-1.5">{c.name}</td>
+                      <td className="px-2 py-1.5 text-right">{c.expected_quantity}</td>
+                      <td className="px-2 py-1.5 text-right">{c.counted_quantity}</td>
+                      <td
+                        className={`px-2 py-1.5 text-right font-semibold ${
+                          c.difference > 0
+                            ? "text-green-700 dark:text-green-400"
+                            : "text-destructive"
+                        }`}
+                      >
+                        {c.difference > 0 ? `+${c.difference}` : c.difference}
+                      </td>
+                      <td className="px-2 py-1.5 print:hidden">
+                        {c.reconciled_at ? (
+                          <Badge variant="secondary">Yes</Badge>
+                        ) : (
+                          <Badge variant="outline">Not yet</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {canManageStock && !cancelled && outstandingDiscrepancies.length > 0 && (
         <Card className="print:hidden border-destructive/40">
           <CardHeader>
@@ -178,9 +261,9 @@ export default async function StockTakeDetailPage(
             </p>
             <form action={applyAllStockTakeDiscrepancies}>
               <input type="hidden" name="stock_take_id" value={stockTake.id} />
-              <Button type="submit" variant="destructive">
+              <SubmitButton variant="destructive" pendingText="Updating…">
                 Update all ({outstandingDiscrepancies.length})
-              </Button>
+              </SubmitButton>
             </form>
           </CardContent>
         </Card>
@@ -236,9 +319,9 @@ export default async function StockTakeDetailPage(
                             name="stock_take_count_id"
                             value={c.stock_take_count_id}
                           />
-                          <Button type="submit" size="sm" variant="outline">
+                          <SubmitButton size="sm" variant="outline" pendingText="Updating…">
                             Update stock level
-                          </Button>
+                          </SubmitButton>
                         </form>
                       )}
                     </td>
@@ -262,38 +345,12 @@ export default async function StockTakeDetailPage(
           <CardTitle>Not yet counted ({missing.length})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          {missing.length > 0 && (
-            <p className="mb-3 text-sm text-muted-foreground print:hidden">
-              These weren&apos;t scanned, so there&apos;s no counted quantity to update stock to —
-              scan them to include them, or correct one by hand from its stock item page if you
-              already know the real figure.
-            </p>
-          )}
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="px-2 py-1.5 font-medium">ID</th>
-                <th className="px-2 py-1.5 font-medium">Name</th>
-                <th className="px-2 py-1.5 text-right font-medium">System quantity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {missing.map((m) => (
-                <tr key={m.stock_item_id} className="border-b last:border-0">
-                  <td className="px-2 py-1.5 font-medium">{m.id_number}</td>
-                  <td className="px-2 py-1.5">{m.name}</td>
-                  <td className="px-2 py-1.5 text-right">{m.quantity_on_hand}</td>
-                </tr>
-              ))}
-              {missing.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-2 py-6 text-center text-muted-foreground">
-                    Every active stock item has been counted.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <NotCountedTable
+            items={missing}
+            stockTakeId={stockTake.id}
+            recordCountAction={recordCount}
+            canCapture={inProgress}
+          />
         </CardContent>
       </Card>
     </div>

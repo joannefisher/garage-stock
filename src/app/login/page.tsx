@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
+import { SubmitButton } from "@/components/ui/submit-button"
 
 import { login } from "./actions"
 
@@ -55,9 +55,9 @@ export default async function LoginPage(props: PageProps<"/login">) {
                 {error}
               </p>
             )}
-            <Button type="submit" className="w-full">
+            <SubmitButton className="w-full" pendingText="Signing in…">
               Sign in
-            </Button>
+            </SubmitButton>
           </form>
         </CardContent>
       </Card>

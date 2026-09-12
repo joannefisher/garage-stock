@@ -57,24 +57,36 @@ export async function updateSession(request: NextRequest) {
   )
 
   // IMPORTANT: avoid writing logic between createServerClient and
-  // getUser(). A simple mistake could make it very hard to debug issues
+  // getClaims(). A simple mistake could make it very hard to debug issues
   // with users being randomly logged out.
-  const {
-    data: { user: initialUser },
-  } = await supabase.auth.getUser()
-  let user = initialUser
+  //
+  // Uses `getClaims()`, not `auth.getUser()`: this project's JWTs are
+  // signed with an asymmetric key (ES256), so `getClaims()` verifies the
+  // token locally (via the cached JWKS) instead of calling the Auth
+  // server on every single request this middleware runs on — per
+  // Joanne's explicit sign-off (Sept 2026, see CLAUDE.md's "record
+  // creation is slow" note) after the trade-off was flagged: a
+  // revoked/banned user's session keeps working until the JWT's natural
+  // (short-lived) expiry rather than being cut off immediately.
+  // `getClaims()` still refreshes an about-to-expire session first, so
+  // this remains the session-refresh point its own doc comment promises.
+  // `data` (not just `data.claims`) is nullable on error, so this reads
+  // `data?.claims` rather than destructuring `claims` off `data` directly,
+  // which doesn't type-check against the null branch.
+  const { data: initialClaimsData } = await supabase.auth.getClaims()
+  let signedIn = Boolean(initialClaimsData?.claims)
 
   // See the AUTH_AUTO_LOGIN comment above — temporary, testing-only.
   // Unconditional on path (including /login itself), so nobody ever sees
   // the login form while it's on. Only attempted once per browser:
   // signInWithPassword sets the session cookie via the cookies.setAll
-  // handler above, so every later request already has `user` set from
-  // getUser() and skips this.
-  if (!user) {
+  // handler above, so every later request already has a session and
+  // skips this.
+  if (!signedIn) {
     const credentials = autoLoginCredentials()
     if (credentials) {
-      const { data, error } = await supabase.auth.signInWithPassword(credentials)
-      if (!error) user = data.user
+      const { error } = await supabase.auth.signInWithPassword(credentials)
+      if (!error) signedIn = true
     }
   }
 
@@ -82,14 +94,14 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith(path)
   )
 
-  if (!user && !isPublicPath) {
+  if (!signedIn && !isPublicPath) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
     url.searchParams.set("next", request.nextUrl.pathname)
     return NextResponse.redirect(url)
   }
 
-  if (user && request.nextUrl.pathname === "/login") {
+  if (signedIn && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone()
     url.pathname = "/dashboard"
     url.search = ""

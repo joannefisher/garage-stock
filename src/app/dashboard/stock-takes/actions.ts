@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
+import { friendlyDbError } from "@/lib/supabase/errors"
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
@@ -46,7 +47,7 @@ export async function startStockTake() {
   if (error || !data) {
     redirect(
       `/dashboard/stock-takes?error=${encodeURIComponent(
-        error?.message ?? "Could not start a stock take."
+        friendlyDbError(error, "Could not start a stock take.")
       )}`
     )
   }
@@ -84,20 +85,24 @@ export async function recordCount(formData: FormData) {
   if (!idOrBarcode) fail("Scan or enter an ID/barcode.")
   if (!Number.isFinite(quantity) || quantity < 0) fail("Enter a quantity of 0 or more.")
 
-  // auth.getUser(), the stock_take status check and the stock_item lookup
+  // getClaims(), the stock_take status check and the stock_item lookup
   // are three independent reads (none depends on another's result), but
   // this is the action a mechanic fires once per scanned item during a
   // stock take — so it was the single highest-value place to stop paying
   // for them one at a time. See CLAUDE.md's "creating records is slow"
   // note: each round trip to this project currently costs ~100-250ms.
+  // getClaims(), not auth.getUser() — this project's JWTs are asymmetric,
+  // so claims verify locally instead of round-tripping to the Auth
+  // server; see the note in src/lib/auth/current-staff.ts.
+  // `data` (not just `data.claims`) is nullable on error, so this reads
+  // `data?.claims` below rather than destructuring `claims` off `data`
+  // directly, which doesn't type-check against the null branch.
   const [
-    {
-      data: { user },
-    },
+    { data: claimsData },
     { data: stockTake },
     { data: stockItem },
   ] = await Promise.all([
-    supabase.auth.getUser(),
+    supabase.auth.getClaims(),
     supabase.from("stock_takes").select("status").eq("id", stockTakeId).maybeSingle(),
     supabase
       .from("stock_items")
@@ -106,7 +111,8 @@ export async function recordCount(formData: FormData) {
       .maybeSingle(),
   ])
 
-  if (!user) redirect("/login")
+  const claims = claimsData?.claims ?? null
+  if (!claims) redirect("/login")
   if (!stockTake) fail("Stock take not found.")
   if (stockTake?.status !== "in_progress") {
     fail("This stock take is already completed — counts can no longer be recorded.")
@@ -123,13 +129,13 @@ export async function recordCount(formData: FormData) {
       stock_item_id: stockItem.id,
       counted_quantity: quantity,
       expected_quantity: stockItem.quantity_on_hand,
-      counted_by: user.id,
+      counted_by: claims.sub,
       counted_at: new Date().toISOString(),
     },
     { onConflict: "stock_take_id,stock_item_id" }
   )
 
-  if (error) fail(error.message)
+  if (error) fail(friendlyDbError(error))
 
   // Redirect with a confirmation, not just back to the same-looking page —
   // without this, recording a count (especially re-counting something
@@ -194,7 +200,7 @@ export async function completeStockTake(formData: FormData) {
     })
     .eq("id", stockTakeId)
 
-  if (error) fail(error.message)
+  if (error) fail(friendlyDbError(error))
 
   redirect(`/dashboard/stock-takes/${stockTakeId}`)
 }
@@ -247,7 +253,7 @@ export async function cancelStockTake(formData: FormData) {
     .update({ status: "cancelled" })
     .eq("id", stockTakeId)
 
-  if (error) fail(error.message)
+  if (error) fail(friendlyDbError(error))
 
   redirect(`/dashboard/stock-takes/${stockTakeId}`)
 }
@@ -289,7 +295,10 @@ async function reconcileStockTakeCount(
     .maybeSingle()
 
   if (stockItemError || !stockItem) {
-    return { error: stockItemError?.message ?? "Stock item no longer exists.", applied: false }
+    return {
+      error: friendlyDbError(stockItemError, "Stock item no longer exists."),
+      applied: false,
+    }
   }
 
   const delta = count.counted_quantity - stockItem.quantity_on_hand
@@ -310,7 +319,10 @@ async function reconcileStockTakeCount(
       .single()
 
     if (movementError || !movement) {
-      return { error: movementError?.message ?? "Could not record the adjustment.", applied: false }
+      return {
+        error: friendlyDbError(movementError, "Could not record the adjustment."),
+        applied: false,
+      }
     }
     movementId = movement.id
   }
@@ -320,7 +332,7 @@ async function reconcileStockTakeCount(
     .update({ reconciled_at: new Date().toISOString(), reconciled_movement_id: movementId })
     .eq("id", count.id)
 
-  if (updateError) return { error: updateError.message, applied: false }
+  if (updateError) return { error: friendlyDbError(updateError), applied: false }
   return { applied: true }
 }
 
@@ -402,7 +414,7 @@ export async function applyAllStockTakeDiscrepancies(formData: FormData) {
   }
 
   if (countsError) {
-    fail(countsError.message)
+    fail(friendlyDbError(countsError))
     return
   }
 

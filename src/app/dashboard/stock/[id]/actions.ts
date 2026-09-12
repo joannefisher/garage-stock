@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
+import { friendlyDbError } from "@/lib/supabase/errors"
 
 export async function recordUsage(formData: FormData) {
   const stockItemId = String(formData.get("stock_item_id") ?? "")
@@ -11,11 +12,16 @@ export async function recordUsage(formData: FormData) {
   const jobNumber = String(formData.get("job_number") ?? "").trim()
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // getClaims(), not auth.getUser() — see the note in
+  // src/lib/auth/current-staff.ts. This action doesn't need role info,
+  // just "who's signed in", so it keeps a plain claims check rather than
+  // paying for getCurrentStaff()'s extra profiles query.
+  // `data` (not just `data.claims`) is nullable on error, so read
+  // `data?.claims` rather than destructuring `claims` off `data` directly.
+  const { data } = await supabase.auth.getClaims()
+  const claims = data?.claims ?? null
 
-  if (!user) redirect("/login")
+  if (!claims) redirect("/login")
   if (!stockItemId || quantity <= 0 || !jobNumber) {
     redirect(
       `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(
@@ -29,11 +35,13 @@ export async function recordUsage(formData: FormData) {
     movement_type: "used",
     quantity: -Math.abs(quantity),
     job_number: jobNumber,
-    performed_by: user.id,
+    performed_by: claims.sub,
   })
 
   if (error) {
-    redirect(`/dashboard/stock/${stockItemId}?error=${encodeURIComponent(error.message)}`)
+    redirect(
+      `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(friendlyDbError(error))}`
+    )
   }
 
   redirect(`/dashboard/stock/${stockItemId}`)
@@ -81,7 +89,9 @@ export async function recordAdjustment(formData: FormData) {
   })
 
   if (error) {
-    redirect(`/dashboard/stock/${stockItemId}?error=${encodeURIComponent(error.message)}`)
+    redirect(
+      `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(friendlyDbError(error))}`
+    )
   }
 
   redirect(`/dashboard/stock/${stockItemId}`)

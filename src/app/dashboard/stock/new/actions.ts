@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
+import { friendlyDbError } from "@/lib/supabase/errors"
 import type { StockItemType, TyreSeason, TyreTier } from "@/types/database.types"
 
 function str(formData: FormData, key: string): string {
@@ -69,7 +70,7 @@ export async function createStockItem(formData: FormData) {
   if (insertError || !stockItem) {
     redirect(
       `/dashboard/stock/new?error=${encodeURIComponent(
-        insertError?.message ?? "Could not create stock item."
+        friendlyDbError(insertError, "Could not create stock item.")
       )}`
     )
   }
@@ -117,12 +118,16 @@ export async function createStockItem(formData: FormData) {
 
   if (detailsResult.error) {
     redirect(
-      `/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(detailsResult.error.message)}`
+      `/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(
+        friendlyDbError(detailsResult.error)
+      )}`
     )
   }
   if (movementResult.error) {
     redirect(
-      `/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(movementResult.error.message)}`
+      `/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(
+        friendlyDbError(movementResult.error)
+      )}`
     )
   }
 

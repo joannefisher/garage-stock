@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SubmitButton } from "@/components/ui/submit-button"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { vehicleLookupProvider, VehicleLookupError, type VehicleLookupResult } from "@/lib/vehicle-lookup"
@@ -215,7 +216,7 @@ export default async function VehiclesPage(props: PageProps<"/dashboard/vehicles
                   <Label htmlFor="fuel_type">Fuel type</Label>
                   <Input id="fuel_type" name="fuel_type" defaultValue={lookupResult.fuelType ?? ""} />
                 </div>
-                <Button type="submit">Save vehicle record</Button>
+                <SubmitButton pendingText="Saving…">Save vehicle record</SubmitButton>
               </form>
             ) : (
               <p className="text-xs text-muted-foreground">

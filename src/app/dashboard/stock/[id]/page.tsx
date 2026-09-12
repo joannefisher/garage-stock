@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SubmitButton } from "@/components/ui/submit-button"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockItemWithDetails } from "@/lib/stock/types"
@@ -142,9 +142,9 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                 <Label htmlFor="job_number">Job number</Label>
                 <Input id="job_number" name="job_number" required />
               </div>
-              <Button type="submit" variant="secondary">
+              <SubmitButton variant="secondary" pendingText="Removing…">
                 Remove from stock
-              </Button>
+              </SubmitButton>
             </form>
           </CardContent>
         </Card>
@@ -167,9 +167,9 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                   <Label htmlFor="adjustment_notes">Reason</Label>
                   <Input id="adjustment_notes" name="notes" placeholder="e.g. stock check correction" />
                 </div>
-                <Button type="submit" variant="outline">
+                <SubmitButton variant="outline" pendingText="Applying…">
                   Apply adjustment
-                </Button>
+                </SubmitButton>
               </form>
             </CardContent>
           </Card>
