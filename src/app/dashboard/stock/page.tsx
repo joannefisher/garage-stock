@@ -174,25 +174,35 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
               : ""}
           </p>
         </div>
-        {canManageStock && (
-          <Button asChild size="lg">
-            <Link href="/dashboard/stock/new">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              Add stock item
-            </Link>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="lg">
+            <Link href="/dashboard/stock/reorder-report">Reorder report</Link>
           </Button>
-        )}
+          {canManageStock && (
+            <>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/dashboard/stock/receive">Receive stock</Link>
+              </Button>
+              <Button asChild size="lg">
+                <Link href="/dashboard/stock/new">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Add product
+                </Link>
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -210,7 +220,7 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
           label="Low stock"
           value={String(lowStockCount)}
           tone="destructive"
-          href="/dashboard/stock?stock_status=low"
+          href="/dashboard/stock/reorder-report"
         />
         <StatTile
           label="Stocktakes this month"

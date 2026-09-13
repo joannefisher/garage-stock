@@ -15,7 +15,7 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
   if (!staff?.canManageStock) {
     redirect(
       `/dashboard/stock?error=${encodeURIComponent(
-        "Only admins and managers can add stock items."
+        "Only admins and managers can add products."
       )}`
     )
   }
@@ -26,14 +26,15 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Add stock item</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Add product</h1>
         <p className="text-muted-foreground">
-          Enter a new part or tyre into the stock file.
+          Set up a new part or tyre in the catalogue for the first time. Once it exists, use
+          &quot;Receive stock&quot; on the stock page to add quantity or update its cost price.
         </p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>New item</CardTitle>
+          <CardTitle>New product</CardTitle>
         </CardHeader>
         <CardContent>
           <StockItemForm suppliers={suppliers ?? []} action={createStockItem} error={error} />

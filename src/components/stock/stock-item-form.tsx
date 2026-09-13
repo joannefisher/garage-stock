@@ -207,7 +207,7 @@ export function StockItemForm({
       )}
 
       <div className="flex justify-end gap-2">
-        <SubmitButton pendingText="Saving…">Save stock item</SubmitButton>
+        <SubmitButton pendingText="Saving…">Save product</SubmitButton>
       </div>
     </form>
   )

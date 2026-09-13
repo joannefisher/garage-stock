@@ -40,7 +40,7 @@ export async function createStockItem(formData: FormData) {
   if (!staff.canManageStock) {
     redirect(
       `/dashboard/stock/new?error=${encodeURIComponent(
-        "Only admins and managers can add stock items."
+        "Only admins and managers can add products."
       )}`
     )
   }
@@ -70,7 +70,7 @@ export async function createStockItem(formData: FormData) {
   if (insertError || !stockItem) {
     redirect(
       `/dashboard/stock/new?error=${encodeURIComponent(
-        friendlyDbError(insertError, "Could not create stock item.")
+        friendlyDbError(insertError, "Could not create product.")
       )}`
     )
   }

@@ -195,7 +195,18 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
             <CardHeader>
               <CardTitle>Adjust stock</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                For corrections only — stock check, damage, loss. New stock arriving or a
+                supplier price change is{" "}
+                <Link
+                  href={`/dashboard/stock/receive?id=${encodeURIComponent(stockItem.id_number)}`}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  Receive stock
+                </Link>
+                , not an adjustment.
+              </p>
               <form action={recordAdjustment} className="flex flex-col gap-3">
                 <input type="hidden" name="stock_item_id" value={stockItem.id} />
                 <div className="flex flex-col gap-1.5">
