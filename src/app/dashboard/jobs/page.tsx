@@ -1,7 +1,9 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentStaff } from "@/lib/auth/current-staff"
 
 import { JobsTable } from "./jobs-table"
 
@@ -12,6 +14,11 @@ export default async function JobsPage(props: PageProps<"/dashboard/jobs">) {
   const status = searchParams.status === "closed" || searchParams.status === "all" ? searchParams.status : "open"
 
   const supabase = await createClient()
+  // Mechanics get the single mobile screen, not this desktop table — see
+  // the comment on MECHANIC_LINKS in site-nav.tsx.
+  const staff = await getCurrentStaff()
+  if (staff?.isMechanic) redirect("/dashboard/jobs/mechanic")
+
   let query = supabase
     .from("jobs")
     .select(

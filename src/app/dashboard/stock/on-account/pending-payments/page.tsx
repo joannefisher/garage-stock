@@ -116,9 +116,11 @@ export default async function PendingPaymentsPage(
               <th className="px-4 py-3.5 font-bold">Supplier</th>
               <th className="px-4 py-3.5 font-bold">ID</th>
               <th className="px-4 py-3.5 font-bold">Name</th>
+              <th className="px-4 py-3.5 font-bold">Invoice #</th>
+              <th className="px-4 py-3.5 font-bold">Car reg</th>
               <th className="px-4 py-3.5 text-right font-bold">Qty</th>
               <th className="px-4 py-3.5 text-right font-bold">Amount due</th>
-              <th className="px-4 py-3.5 font-bold">Committed</th>
+              <th className="px-4 py-3.5 font-bold">Received</th>
               <th className="px-4 py-3.5 font-bold">Payment due</th>
               <th className="px-4 py-3.5 font-bold print:hidden">Actions</th>
             </tr>
@@ -141,12 +143,16 @@ export default async function PendingPaymentsPage(
                   </Link>
                 </td>
                 <td className="px-4 py-3.5 font-semibold">{row.name}</td>
+                <td className="px-4 py-3.5 text-muted-foreground">{row.invoice_number ?? "—"}</td>
+                <td className="px-4 py-3.5 text-muted-foreground">
+                  {row.vehicle_registration ?? "—"}
+                </td>
                 <td className="px-4 py-3.5 text-right">{row.quantity}</td>
                 <td className="px-4 py-3.5 text-right font-bold">
                   £{row.amount_due.toFixed(2)}
                 </td>
                 <td className="px-4 py-3.5 whitespace-nowrap text-muted-foreground">
-                  {row.committed_at ? new Date(row.committed_at).toLocaleDateString("en-GB") : "—"}
+                  {new Date(row.received_at).toLocaleDateString("en-GB")}
                 </td>
                 <td
                   className={`px-4 py-3.5 whitespace-nowrap font-semibold ${
@@ -171,7 +177,7 @@ export default async function PendingPaymentsPage(
             ))}
             {rows.length === 0 && !error && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
                   Nothing is pending payment right now.
                 </td>
               </tr>

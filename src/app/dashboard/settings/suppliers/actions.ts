@@ -55,6 +55,7 @@ export async function createSupplier(formData: FormData) {
       contact_name: optionalStr(formData, "contact_name"),
       phone: optionalStr(formData, "phone"),
       email: optionalStr(formData, "email"),
+      address: optionalStr(formData, "address"),
       notes: optionalStr(formData, "notes"),
     })
     .select("id")
@@ -92,6 +93,7 @@ export async function updateSupplier(formData: FormData) {
       contact_name: optionalStr(formData, "contact_name"),
       phone: optionalStr(formData, "phone"),
       email: optionalStr(formData, "email"),
+      address: optionalStr(formData, "address"),
       notes: optionalStr(formData, "notes"),
     })
     .eq("id", supplierId)

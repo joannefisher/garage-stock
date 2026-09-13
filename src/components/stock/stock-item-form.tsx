@@ -25,6 +25,11 @@ export function StockItemForm({
   error?: string
 }) {
   const [itemType, setItemType] = useState<"part" | "tyre">("part")
+  // Black Circle tyres are never owned or charged for (0016_black_circle_
+  // stock.sql) — hiding the price fields here is the UI half of that;
+  // the server action hard-zeros both regardless of what's submitted, so
+  // this hide is a convenience, not the enforcement.
+  const [isBlackCircle, setIsBlackCircle] = useState(false)
 
   return (
     <form action={action} className="flex flex-col gap-6">
@@ -83,14 +88,25 @@ export function StockItemForm({
             ))}
           </select>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="cost_price">Cost price (£)</Label>
-          <Input id="cost_price" name="cost_price" type="number" step="0.01" min="0" defaultValue="0" />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="selling_price">Selling price (£)</Label>
-          <Input id="selling_price" name="selling_price" type="number" step="0.01" min="0" defaultValue="0" />
-        </div>
+        {!isBlackCircle && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cost_price">Cost price (£)</Label>
+              <Input id="cost_price" name="cost_price" type="number" step="0.01" min="0" defaultValue="0" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="selling_price">Selling price (£)</Label>
+              <Input
+                id="selling_price"
+                name="selling_price"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue="0"
+              />
+            </div>
+          </>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="ideal_stock_level">Ideal stock level</Label>
@@ -113,6 +129,18 @@ export function StockItemForm({
           <input id="is_consignment" name="is_consignment" type="checkbox" />
           <Label htmlFor="is_consignment">
             On account (loaned from supplier, not owned)
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            id="is_black_circle"
+            name="is_black_circle"
+            type="checkbox"
+            checked={isBlackCircle}
+            onChange={(e) => setIsBlackCircle(e.target.checked)}
+          />
+          <Label htmlFor="is_black_circle">
+            Black Circle stock (never owned, job-locked, no charge for the tyre)
           </Label>
         </div>
 

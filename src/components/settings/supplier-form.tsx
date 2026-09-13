@@ -46,6 +46,10 @@ export function SupplierForm({
         </div>
       </div>
       <div className="flex flex-col gap-1.5">
+        <Label htmlFor="address">Address</Label>
+        <Input id="address" name="address" defaultValue={supplier?.address ?? ""} />
+      </div>
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="notes">Notes</Label>
         <Input id="notes" name="notes" defaultValue={supplier?.notes ?? ""} />
       </div>

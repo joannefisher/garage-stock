@@ -9,9 +9,9 @@ import { friendlyDbError } from "@/lib/supabase/errors"
 // Shared by two callers — the item detail page's "On account stock"
 // table (src/app/dashboard/stock/[id]/page.tsx) and the pending-payments
 // report (src/app/dashboard/stock/on-account/pending-payments) — since
-// both list on-account lots and need to commit/return/mark-paid one
-// from wherever it's shown. Each form includes a `redirect_to` hidden
-// field so either page gets sent back to itself rather than one action
+// both list on-account lots and need to return/mark-paid one from
+// wherever it's shown. Each form includes a `redirect_to` hidden field so
+// either page gets sent back to itself rather than one action
 // hardcoding a single destination.
 //
 // "On account" is the user-facing label (renamed from "Consignment",
@@ -20,6 +20,13 @@ import { friendlyDbError } from "@/lib/supabase/errors"
 // consignment_lot_id, etc.), left as-is deliberately since renaming them
 // would mean a schema migration for a label-only change. Function names
 // here follow the DB naming for the same reason.
+//
+// There used to be a third action here, commitConsignmentLot ("commit to
+// stock") — removed Sept 2026 when the on-account flow was simplified to
+// receive → return-or-pay (see receiveConsignmentStock in
+// ./receive/actions.ts). Every new lot is written straight into
+// 'committed' at receipt now, so there's nothing left mid-lifecycle for a
+// separate commit step to act on.
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim()
@@ -36,65 +43,19 @@ function withParam(path: string, key: string, value: string): string {
   return `${path}${path.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(value)}`
 }
 
-const PAYMENT_TERMS_DAYS = 30
-
 /**
- * "Commit to stock" — the deliberate, manual action that converts a
- * consignment lot to owned/payable (0011_consignment_stock_lots.sql,
- * design point 2: this is NOT automatic on use or on the due-back date
- * passing). Doesn't touch quantity_on_hand — that was already counted
- * when the lot was received — it just marks the lot committed and sets
- * a payment-due date 30 days out, which is what the pending-payments
- * report reads. Admin/manager only, mirroring "Admins/managers can
- * manage consignment stock lots" (0011).
- */
-export async function commitConsignmentLot(formData: FormData) {
-  const redirectTo = safeRedirectTo(formData)
-  const lotId = str(formData, "lot_id")
-
-  function fail(message: string): never {
-    redirect(withParam(redirectTo, "error", message))
-  }
-
-  if (!lotId) fail("That on-account item could not be found.")
-
-  const staff = await getCurrentStaff()
-  if (!staff) redirect("/login")
-  if (!staff.canManageStock) fail("Only admins and managers can commit on-account stock.")
-
-  const supabase = await createClient()
-  const committedAt = new Date()
-  const paymentDueDate = new Date(committedAt)
-  paymentDueDate.setDate(paymentDueDate.getDate() + PAYMENT_TERMS_DAYS)
-
-  const { error } = await supabase
-    .from("consignment_stock_lots")
-    .update({
-      status: "committed",
-      committed_at: committedAt.toISOString(),
-      committed_by: staff.id,
-      payment_due_date: paymentDueDate.toISOString().slice(0, 10),
-    })
-    .eq("id", lotId)
-    .eq("status", "on_consignment") // can't commit a lot twice, or one already returned
-
-  if (error) {
-    fail(
-      friendlyDbError(
-        error,
-        "Could not commit this lot to stock — it may already be committed or returned."
-      )
-    )
-  }
-
-  redirect(withParam(redirectTo, "committed", "1"))
-}
-
-/**
- * Sends a consignment lot back to the supplier unused, while it's still
- * on_consignment — records a return_to_supplier movement (removing its
- * quantity from stock, same as any other return) and marks the lot
- * returned. Admin/manager only, same reasoning as commitConsignmentLot.
+ * Sends a consignment lot back to the supplier unused — records a
+ * return_to_supplier movement (removing its quantity from stock, same as
+ * any other return) and marks the lot returned. Admin/manager only.
+ *
+ * Every lot now lands in 'committed' status straight from receipt (see
+ * receiveConsignmentStock in ./receive/actions.ts — there's no more
+ * separate "commit to stock" step, since Joanne's described flow captures
+ * everything up front and goes straight to "received, owed"), so this
+ * checks "committed and not yet paid" rather than the old
+ * "on_consignment" — that's what "still on account, not yet returned"
+ * actually means now. A paid lot can no longer be returned through this
+ * action (nothing in scope asked for undoing a payment).
  */
 export async function returnConsignmentLot(formData: FormData) {
   const redirectTo = safeRedirectTo(formData)
@@ -113,13 +74,13 @@ export async function returnConsignmentLot(formData: FormData) {
   const supabase = await createClient()
   const { data: lot } = await supabase
     .from("consignment_stock_lots")
-    .select("id, stock_item_id, quantity, status")
+    .select("id, stock_item_id, quantity, status, paid_at")
     .eq("id", lotId)
     .maybeSingle()
 
   if (!lot) fail("That on-account item could not be found.")
-  if (lot.status !== "on_consignment") {
-    fail("Only stock still on account (not yet committed or returned) can be returned.")
+  if (lot.status !== "committed" || lot.paid_at) {
+    fail("Only unpaid on-account stock (not yet returned or paid) can be returned.")
   }
 
   const returnedAt = new Date().toISOString()
@@ -141,7 +102,7 @@ export async function returnConsignmentLot(formData: FormData) {
       .from("consignment_stock_lots")
       .update({ status: "returned", returned_at: returnedAt, returned_by: staff.id })
       .eq("id", lot.id)
-      .eq("status", "on_consignment"),
+      .eq("status", "committed"),
   ])
 
   if (movementResult.error) {

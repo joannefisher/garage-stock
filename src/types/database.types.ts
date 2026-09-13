@@ -1,5 +1,5 @@
 /**
- * Hand-written types matching supabase/migrations/0001-0014.
+ * Hand-written types matching supabase/migrations/0001-0017.
  *
  * Once your Supabase project is linked, regenerate the real (guaranteed
  * accurate) types and replace this file entirely:
@@ -45,6 +45,8 @@ export type SupplierReturnStatus = "draft" | "sent" | "credited"
 export type StockTakeStatus = "in_progress" | "completed" | "cancelled"
 export type JobStatus = "open" | "closed"
 export type ConsignmentLotStatus = "on_consignment" | "committed" | "returned"
+// 0016_black_circle_stock.sql
+export type BlackCircleLotStatus = "in_stock" | "used" | "returned"
 
 // ---------------------------------------------------------------------
 // profiles (0001_init.sql)
@@ -76,6 +78,8 @@ export type SupplierRow = {
   contact_name: string | null
   phone: string | null
   email: string | null
+  // 0015_supplier_address_and_on_account_fields.sql
+  address: string | null
   notes: string | null
   is_active: boolean
   created_at: string
@@ -87,6 +91,7 @@ export type SupplierInsert = {
   contact_name?: string | null
   phone?: string | null
   email?: string | null
+  address?: string | null
   notes?: string | null
   is_active?: boolean
   created_at?: string
@@ -111,6 +116,15 @@ export type StockItemRow = {
   selling_price: number
   is_non_returnable: boolean
   is_consignment: boolean
+  // 0016_black_circle_stock.sql — see that migration's header for why
+  // this is a flag on the product rather than keyed off the supplier's
+  // name. Independent of is_consignment: a product is either a normal
+  // owned item, an on-account item, or a Black Circle item (the Add
+  // Product form and stock/new/actions.ts don't currently stop someone
+  // ticking both is_consignment and is_black_circle at once, since
+  // nothing in scope asked for that cross-validation — treat that combo
+  // as unsupported/undefined rather than relied on).
+  is_black_circle: boolean
   vehicle_note: string | null
   quantity_on_hand: number
   ideal_stock_level: number
@@ -130,6 +144,7 @@ export type StockItemInsert = {
   selling_price?: number
   is_non_returnable?: boolean
   is_consignment?: boolean
+  is_black_circle?: boolean
   vehicle_note?: string | null
   quantity_on_hand?: number
   ideal_stock_level?: number
@@ -222,6 +237,10 @@ export type StockMovementRow = {
   // (0011_consignment_stock_lots.sql) — same "trace back to origin"
   // idea as job_id/purchase_order_id/stock_take_id above.
   consignment_lot_id: string | null
+  // Set on goods_in/used/return_to_supplier movements for Black Circle
+  // stock (0016_black_circle_stock.sql) — same "trace back to origin"
+  // idea as consignment_lot_id above.
+  black_circle_lot_id: string | null
   performed_by: string | null
   notes: string | null
   created_at: string
@@ -237,6 +256,7 @@ export type StockMovementInsert = {
   supplier_return_id?: string | null
   stock_take_id?: string | null
   consignment_lot_id?: string | null
+  black_circle_lot_id?: string | null
   performed_by?: string | null
   notes?: string | null
   created_at?: string
@@ -259,6 +279,8 @@ export type ConsignmentStockLotRow = {
   id: string
   stock_item_id: string
   quantity: number
+  // "Price exc. VAT" in the UI (0015 — see that migration's header
+  // comment for why this didn't get a second, separate column).
   cost_price: number
   received_at: string
   received_by: string | null
@@ -271,6 +293,12 @@ export type ConsignmentStockLotRow = {
   paid_by: string | null
   returned_at: string | null
   returned_by: string | null
+  // 0015_supplier_address_and_on_account_fields.sql — captured at receipt,
+  // per item (not grouped under a separate invoice entity — see
+  // on-account/receive/actions.ts).
+  invoice_number: string | null
+  vehicle_registration: string | null
+  price_inc_vat: number | null
   notes: string | null
   created_by: string | null
   created_at: string
@@ -292,12 +320,59 @@ export type ConsignmentStockLotInsert = {
   paid_by?: string | null
   returned_at?: string | null
   returned_by?: string | null
+  invoice_number?: string | null
+  vehicle_registration?: string | null
+  price_inc_vat?: number | null
   notes?: string | null
   created_by?: string | null
   created_at?: string
   updated_at?: string
 }
 export type ConsignmentStockLotUpdate = Partial<ConsignmentStockLotInsert>
+
+// ---------------------------------------------------------------------
+// black_circle_stock_lots (0016_black_circle_stock.sql)
+// ---------------------------------------------------------------------
+// Black Circles-style job-locked stock — see that migration's header
+// comment for the full design. Mirrors consignment_stock_lots' shape,
+// with job_id fixed and required instead of consignment's due_back_at/
+// payment fields, since this stock is never owned or paid for.
+
+export type BlackCircleStockLotRow = {
+  id: string
+  stock_item_id: string
+  job_id: string
+  quantity: number
+  received_at: string
+  received_by: string | null
+  status: BlackCircleLotStatus
+  used_at: string | null
+  used_by: string | null
+  returned_at: string | null
+  returned_by: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+export type BlackCircleStockLotInsert = {
+  id?: string
+  stock_item_id: string
+  job_id: string
+  quantity: number
+  received_at?: string
+  received_by?: string | null
+  status?: BlackCircleLotStatus
+  used_at?: string | null
+  used_by?: string | null
+  returned_at?: string | null
+  returned_by?: string | null
+  notes?: string | null
+  created_by?: string | null
+  created_at?: string
+  updated_at?: string
+}
+export type BlackCircleStockLotUpdate = Partial<BlackCircleStockLotInsert>
 
 // ---------------------------------------------------------------------
 // purchase_orders / purchase_order_lines
@@ -633,6 +708,12 @@ export type ConsignmentPendingPaymentRow = {
   committed_at: string | null
   payment_due_date: string | null
   is_overdue: boolean
+  // 0015_supplier_address_and_on_account_fields.sql — added to the view
+  // alongside the new columns on consignment_stock_lots (see
+  // 0017_on_account_view_new_fields.sql).
+  invoice_number: string | null
+  vehicle_registration: string | null
+  price_inc_vat: number | null
 }
 
 // ---------------------------------------------------------------------
@@ -692,6 +773,12 @@ export type Database = {
         Row: ConsignmentStockLotRow
         Insert: ConsignmentStockLotInsert
         Update: ConsignmentStockLotUpdate
+        Relationships: []
+      }
+      black_circle_stock_lots: {
+        Row: BlackCircleStockLotRow
+        Insert: BlackCircleStockLotInsert
+        Update: BlackCircleStockLotUpdate
         Relationships: []
       }
       purchase_orders: {
@@ -786,6 +873,7 @@ export type Database = {
       stock_take_status: StockTakeStatus
       job_status: JobStatus
       consignment_lot_status: ConsignmentLotStatus
+      black_circle_lot_status: BlackCircleLotStatus
     }
   }
 }

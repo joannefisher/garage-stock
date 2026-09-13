@@ -17,6 +17,16 @@ const NAV_LINKS = [
 // appended conditionally rather than living in the static NAV_LINKS list.
 const SETTINGS_LINK = { href: "/dashboard/settings", label: "Settings" } as const
 
+// Mechanics get one link, not the full nav (Sept 2026, per Joanne: "a
+// single UI with Jobs page only ... designed for phone/tablet"). See
+// dashboard/jobs/mechanic/page.tsx for the screen itself, and the
+// redirect in dashboard/page.tsx that lands mechanics here by default.
+// This is a nav-visibility choice only, same "UI convenience, not the
+// security boundary" caveat as everywhere else current-staff.ts is
+// used — a mechanic typing another dashboard URL directly still reaches
+// it, unchanged from before.
+const MECHANIC_LINKS = [{ href: "/dashboard/jobs/mechanic", label: "My Jobs" }] as const
+
 function isActive(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === "/dashboard"
   return pathname === href || pathname.startsWith(`${href}/`)
@@ -25,12 +35,14 @@ function isActive(pathname: string, href: string) {
 export function SiteNav({
   className,
   canManageStock = false,
+  isMechanic = false,
 }: {
   className?: string
   canManageStock?: boolean
+  isMechanic?: boolean
 }) {
   const pathname = usePathname()
-  const links = canManageStock ? [...NAV_LINKS, SETTINGS_LINK] : NAV_LINKS
+  const links = isMechanic ? MECHANIC_LINKS : canManageStock ? [...NAV_LINKS, SETTINGS_LINK] : NAV_LINKS
 
   return (
     <nav className={cn("flex items-center gap-1", className)}>

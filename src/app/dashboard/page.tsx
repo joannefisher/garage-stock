@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 
@@ -40,6 +41,9 @@ const TONE_CLASSES = {
 
 export default async function DashboardPage() {
   const staff = await getCurrentStaff()
+  // Mechanics get one screen, not this overview (Sept 2026 — see the
+  // comment on MECHANIC_LINKS in site-nav.tsx).
+  if (staff?.isMechanic) redirect("/dashboard/jobs/mechanic")
   const firstName = staff?.email?.split("@")[0]?.split(/[._]/)[0]
 
   return (

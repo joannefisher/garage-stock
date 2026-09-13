@@ -23,10 +23,17 @@ export async function recordUsage(formData: FormData) {
   // getClaims(), not auth.getUser() — see the note in
   // src/lib/auth/current-staff.ts. This action doesn't need role info,
   // just "who's signed in", so it keeps a plain claims check rather than
-  // paying for getCurrentStaff()'s extra profiles query.
+  // paying for getCurrentStaff()'s extra profiles query. The is_black_circle
+  // lookup is independent of that claims check — one parallel wave, see
+  // the perf note in CLAUDE.md.
   // `data` (not just `data.claims`) is nullable on error, so read
   // `data?.claims` rather than destructuring `claims` off `data` directly.
-  const { data } = await supabase.auth.getClaims()
+  const [{ data }, { data: stockItem }] = await Promise.all([
+    supabase.auth.getClaims(),
+    stockItemId
+      ? supabase.from("stock_items").select("is_black_circle").eq("id", stockItemId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
   const claims = data?.claims ?? null
 
   if (!claims) redirect("/login")
@@ -34,6 +41,18 @@ export async function recordUsage(formData: FormData) {
     redirect(
       `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(
         "Quantity and an open job are required."
+      )}`
+    )
+  }
+  // Black Circle stock is job-locked at receipt and can never be used
+  // against a different job — this generic form has no lot to check that
+  // against, so it's blocked entirely rather than risking the rule
+  // (0016_black_circle_stock.sql). Use it from the Black Circle stock
+  // report instead.
+  if (stockItem?.is_black_circle) {
+    redirect(
+      `/dashboard/stock/${stockItemId}?error=${encodeURIComponent(
+        "This is Black Circle stock — mark it used from the Black Circle stock report against the job it was received for."
       )}`
     )
   }

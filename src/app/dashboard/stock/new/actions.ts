@@ -47,6 +47,11 @@ export async function createStockItem(formData: FormData) {
 
   const itemType = str(formData, "item_type") as StockItemType
   const initialQuantity = num(formData, "initial_quantity", 0)
+  // Black Circle stock is never owned or charged for (0016_black_circle_
+  // stock.sql) — hard-zeroed here regardless of what the form submitted,
+  // not just hidden client-side (stock-item-form.tsx), since a hidden
+  // field is still user-controllable input.
+  const isBlackCircle = formData.get("is_black_circle") === "on"
 
   const { data: stockItem, error: insertError } = await supabase
     .from("stock_items")
@@ -55,10 +60,11 @@ export async function createStockItem(formData: FormData) {
       id_number: str(formData, "id_number"),
       name: str(formData, "name"),
       supplier_id: optionalStr(formData, "supplier_id"),
-      cost_price: num(formData, "cost_price"),
-      selling_price: num(formData, "selling_price"),
+      cost_price: isBlackCircle ? 0 : num(formData, "cost_price"),
+      selling_price: isBlackCircle ? 0 : num(formData, "selling_price"),
       is_non_returnable: formData.get("is_non_returnable") === "on",
       is_consignment: formData.get("is_consignment") === "on",
+      is_black_circle: isBlackCircle,
       vehicle_note: optionalStr(formData, "vehicle_note"),
       ideal_stock_level: num(formData, "ideal_stock_level", 0),
       location: optionalStr(formData, "location"),

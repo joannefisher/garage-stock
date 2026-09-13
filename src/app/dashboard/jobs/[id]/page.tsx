@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -63,6 +63,11 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
   ])
 
   if (!job) notFound()
+  // Mechanics get the single mobile screen for this same job, not this
+  // desktop detail page — see the comment on MECHANIC_LINKS in
+  // site-nav.tsx. Redirected after the not-found check so an invalid
+  // job id 404s the same way for everyone.
+  if (staff?.isMechanic) redirect(`/dashboard/jobs/mechanic?job=${id}`)
 
   const usage = (usageData ?? []) as unknown as UsageRow[]
   const open = job.status === "open"

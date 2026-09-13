@@ -16,6 +16,24 @@ function optionalStr(formData: FormData, key: string): string | null {
 }
 
 /**
+ * Merges query params onto a redirect target that may already carry its
+ * own query string (e.g. `/dashboard/jobs/mechanic?job=<id>`), without
+ * clobbering it. Plain string concatenation (`${returnTo}?error=...`)
+ * would break the moment `returnTo` already has a `?job=` on it — this is
+ * what lets closeJob/addPartToJob below accept a caller-supplied
+ * `return_to` (used by the mechanic single-screen view, see
+ * jobs/mechanic/page.tsx) while keeping their own `?error=`/`?added=`
+ * feedback params.
+ */
+function appendParams(url: string, params: Record<string, string>): string {
+  const [path, query] = url.split("?")
+  const search = new URLSearchParams(query ?? "")
+  for (const [key, value] of Object.entries(params)) search.set(key, value)
+  const qs = search.toString()
+  return qs ? `${path}?${qs}` : path
+}
+
+/**
  * Opens a new job. Any signed-in staff member — mirrors the "Staff can
  * create jobs" RLS policy (0009_jobs.sql), which is the actual gatekeeper;
  * this just gives a friendlier error than a raw RLS failure.
@@ -98,11 +116,16 @@ export async function createJob(formData: FormData) {
  */
 export async function closeJob(formData: FormData) {
   const jobId = str(formData, "job_id")
+  // Defaults to the desktop job detail page — preserves the original
+  // behavior for that page's own form. The mechanic single-screen view
+  // (jobs/mechanic/page.tsx) passes its own `return_to` so completing a
+  // job there lands back on the job list, not a page it doesn't have.
+  const returnTo = optionalStr(formData, "return_to") ?? `/dashboard/jobs/${jobId}`
 
   const supabase = await createClient()
 
   function fail(message: string) {
-    redirect(`/dashboard/jobs/${jobId}?error=${encodeURIComponent(message)}`)
+    redirect(appendParams(returnTo, { error: message }))
   }
 
   // getCurrentStaff() and the job status check are independent — run
@@ -129,7 +152,7 @@ export async function closeJob(formData: FormData) {
 
   if (error) fail(friendlyDbError(error))
 
-  redirect(`/dashboard/jobs/${jobId}`)
+  redirect(returnTo)
 }
 
 /**
@@ -202,15 +225,14 @@ export async function addPartToJob(formData: FormData) {
   const jobId = str(formData, "job_id")
   const idOrBarcode = str(formData, "id_or_barcode")
   const quantity = Number(str(formData, "quantity"))
+  // See closeJob's comment above — same opt-in `return_to` for the
+  // mechanic single-screen view.
+  const returnTo = optionalStr(formData, "return_to") ?? `/dashboard/jobs/${jobId}`
 
   const supabase = await createClient()
 
   function fail(message: string) {
-    redirect(
-      `/dashboard/jobs/${jobId}?error=${encodeURIComponent(message)}&value=${encodeURIComponent(
-        idOrBarcode
-      )}`
-    )
+    redirect(appendParams(returnTo, { error: message, value: idOrBarcode }))
   }
 
   if (!idOrBarcode) fail("Scan or enter an ID/barcode.")
@@ -225,7 +247,7 @@ export async function addPartToJob(formData: FormData) {
     supabase.from("jobs").select("status").eq("id", jobId).maybeSingle(),
     supabase
       .from("stock_items")
-      .select("id, id_number, quantity_on_hand")
+      .select("id, id_number, quantity_on_hand, is_black_circle")
       .ilike("id_number", idOrBarcode)
       .maybeSingle(),
   ])
@@ -239,6 +261,14 @@ export async function addPartToJob(formData: FormData) {
     fail(`No stock item found for "${idOrBarcode}".`)
     return
   }
+  // Black Circle stock is job-locked at receipt (0016_black_circle_stock.sql)
+  // — this generic form has no lot to check the lock against, so it's
+  // blocked entirely rather than risking it being used against the wrong
+  // job. Use the Black Circle stock report instead.
+  if (stockItem.is_black_circle) {
+    fail(`"${stockItem.id_number}" is Black Circle stock — mark it used from the Black Circle stock report against the job it was received for.`)
+    return
+  }
 
   const { error } = await supabase.from("stock_movements").insert({
     stock_item_id: stockItem.id,
@@ -250,9 +280,5 @@ export async function addPartToJob(formData: FormData) {
 
   if (error) fail(friendlyDbError(error))
 
-  redirect(
-    `/dashboard/jobs/${jobId}?added=${encodeURIComponent(
-      stockItem.id_number
-    )}&addedQty=${encodeURIComponent(quantity)}`
-  )
+  redirect(appendParams(returnTo, { added: stockItem.id_number, addedQty: String(quantity) }))
 }

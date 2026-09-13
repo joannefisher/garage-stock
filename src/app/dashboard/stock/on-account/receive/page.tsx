@@ -10,6 +10,7 @@ import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { receiveConsignmentStock } from "./actions"
 
 const DEFAULT_DUE_BACK_DAYS = 30
+const DEFAULT_PAYMENT_TERMS_DAYS = 30
 
 type ReceiveConsignmentSearchParams = {
   error?: string
@@ -17,16 +18,20 @@ type ReceiveConsignmentSearchParams = {
   id?: string
   quantity?: string
   cost_price?: string
+  price_inc_vat?: string
+  invoice_number?: string
+  vehicle_registration?: string
   due_back_at?: string
+  payment_due_date?: string
   received?: string
   receivedName?: string
   receivedQty?: string
   dueBack?: string
 }
 
-function defaultDueBack(): string {
+function addDays(days: number): string {
   const d = new Date()
-  d.setDate(d.getDate() + DEFAULT_DUE_BACK_DAYS)
+  d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
 }
 
@@ -61,9 +66,9 @@ export default async function ReceiveConsignmentStockPage(
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Receive on-account stock</h1>
         <p className="text-muted-foreground">
-          For on-account products only — this adds a new item on loan from the supplier, due
-          back by the date you set unless it&apos;s committed to stock first. Regular owned
-          stock uses &quot;Receive stock&quot; instead.
+          For on-account products only — everything about this item is captured now, at receipt:
+          it&apos;s straight away owed to the supplier, ready to return or mark paid. Regular
+          owned stock uses &quot;Receive stock&quot; instead.
         </p>
       </div>
 
@@ -85,17 +90,17 @@ export default async function ReceiveConsignmentStockPage(
         </CardHeader>
         <CardContent>
           <form action={receiveConsignmentStock} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="id_or_barcode">ID / barcode</Label>
-              <ScannableIdInput
-                id="id_or_barcode"
-                name="id_or_barcode"
-                defaultValue={searchParams.value ?? searchParams.id ?? ""}
-                required
-                autoFocus
-              />
-            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label htmlFor="id_or_barcode">ID / barcode</Label>
+                <ScannableIdInput
+                  id="id_or_barcode"
+                  name="id_or_barcode"
+                  defaultValue={searchParams.value ?? searchParams.id ?? ""}
+                  required
+                  autoFocus
+                />
+              </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="quantity">Quantity received</Label>
                 <Input
@@ -108,8 +113,30 @@ export default async function ReceiveConsignmentStockPage(
                   autoComplete="off"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cost_price">Cost price for this lot (£)</Label>
+                <Label htmlFor="invoice_number">Invoice number</Label>
+                <Input
+                  id="invoice_number"
+                  name="invoice_number"
+                  defaultValue={searchParams.invoice_number ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="vehicle_registration">Car registration</Label>
+                <Input
+                  id="vehicle_registration"
+                  name="vehicle_registration"
+                  defaultValue={searchParams.vehicle_registration ?? ""}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cost_price">Price exc. VAT (£)</Label>
                 <Input
                   id="cost_price"
                   name="cost_price"
@@ -122,18 +149,46 @@ export default async function ReceiveConsignmentStockPage(
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="due_back_at">Due back</Label>
+                <Label htmlFor="price_inc_vat">Price inc. VAT (£)</Label>
+                <Input
+                  id="price_inc_vat"
+                  name="price_inc_vat"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={searchParams.price_inc_vat ?? ""}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="due_back_at">Return deadline</Label>
                 <Input
                   id="due_back_at"
                   name="due_back_at"
                   type="date"
-                  defaultValue={searchParams.due_back_at || defaultDueBack()}
+                  defaultValue={searchParams.due_back_at || addDays(DEFAULT_DUE_BACK_DAYS)}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="payment_due_date">Payment due date</Label>
+                <Input
+                  id="payment_due_date"
+                  name="payment_due_date"
+                  type="date"
+                  defaultValue={
+                    searchParams.payment_due_date || addDays(DEFAULT_PAYMENT_TERMS_DAYS)
+                  }
                   required
                 />
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Defaults to 30 days from today — change it if the supplier&apos;s terms are different.
+              Both dates default to 30 days from today — change them if the supplier&apos;s terms
+              are different.
             </p>
             <SubmitButton pendingText="Saving…">Save and scan next</SubmitButton>
           </form>

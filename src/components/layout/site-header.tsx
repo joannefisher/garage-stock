@@ -12,6 +12,7 @@ export async function SiteHeader() {
   const user = staff ? { email: staff.email } : null
   const role = staff?.role ?? null
   const canManageStock = staff?.canManageStock ?? false
+  const isMechanic = staff?.isMechanic ?? false
 
   return (
     // Black header bar over the light workspace ("Option A", chosen by
@@ -35,7 +36,9 @@ export async function SiteHeader() {
               Stock Manager
             </span>
           </Link>
-          {user && <SiteNav className="hidden sm:flex" canManageStock={canManageStock} />}
+          {user && (
+            <SiteNav className="hidden sm:flex" canManageStock={canManageStock} isMechanic={isMechanic} />
+          )}
         </div>
         {user && (
           <div className="flex items-center gap-3 text-sm">
@@ -61,6 +64,7 @@ export async function SiteHeader() {
         <SiteNav
           className="overflow-x-auto border-t border-header-border px-4 py-2 sm:hidden"
           canManageStock={canManageStock}
+          isMechanic={isMechanic}
         />
       )}
     </header>

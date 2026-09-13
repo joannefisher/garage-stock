@@ -12,12 +12,22 @@ import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockItemWithDetails } from "@/lib/stock/types"
 import type { ConsignmentStockLotRow, StockMovementRow } from "@/types/database.types"
 
-import {
-  commitConsignmentLot,
-  markConsignmentLotPaid,
-  returnConsignmentLot,
-} from "../on-account/actions"
+import { markConsignmentLotPaid, returnConsignmentLot } from "../on-account/actions"
+import { returnBlackCircleLot, useBlackCircleLot } from "../black-circle/actions"
 import { recordAdjustment, recordUsage } from "./actions"
+
+// Supabase client typing degrades an embedded-resource select
+// (`jobs(...)`) to `never` here too — same MovementWithJob cast reasoning
+// below applies to a Black Circle lot's job.
+type BlackCircleLotWithJob = {
+  id: string
+  quantity: number
+  received_at: string
+  status: "in_stock" | "used" | "returned"
+  used_at: string | null
+  returned_at: string | null
+  jobs: { id: string; job_number: string } | null
+}
 
 // Supabase client typing degrades an embedded-resource select (`jobs(...)`)
 // to `never` here — same cause as StockItemWithDetails above
@@ -30,46 +40,66 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
   const { id } = await props.params
   const searchParams = await props.searchParams
   const error = typeof searchParams.error === "string" ? searchParams.error : undefined
-  const committed = searchParams.committed === "1"
   const returnedLot = searchParams.returned === "1"
   const paid = searchParams.paid === "1"
+  const bcUsed = searchParams.bc_used === "1"
+  const bcReturned = searchParams.bc_returned === "1"
 
   const supabase = await createClient()
 
   // getCurrentStaff(), the item, its recent movements, its consignment
-  // lots, and the list of open jobs to record usage against are all
-  // independent reads — they run as one parallel wave rather than five
-  // sequential round-trips. See the perf note in CLAUDE.md.
-  const [staff, { data: item }, { data: movements }, { data: consignmentLots }, { data: openJobs }] =
-    await Promise.all([
-      getCurrentStaff(),
-      supabase
-        .from("stock_items")
-        .select("*, suppliers(name), part_details(*), tyre_details(*)")
-        .eq("id", id)
-        .maybeSingle(),
-      supabase
-        .from("stock_movements")
-        .select("*, jobs(job_number)")
-        .eq("stock_item_id", id)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      supabase
-        .from("consignment_stock_lots")
-        .select("*")
-        .eq("stock_item_id", id)
-        .order("received_at", { ascending: false }),
-      supabase
-        .from("jobs")
-        .select("id, job_number, vehicle_registration")
-        .eq("status", "open")
-        .order("created_at", { ascending: false }),
-    ])
+  // lots, its Black Circle lots, and the list of open jobs to record
+  // usage against are all independent reads — they run as one parallel
+  // wave rather than six sequential round-trips. See the perf note in
+  // CLAUDE.md.
+  const [
+    staff,
+    { data: item },
+    { data: movements },
+    { data: consignmentLots },
+    { data: blackCircleLots },
+    { data: openJobs },
+  ] = await Promise.all([
+    getCurrentStaff(),
+    supabase
+      .from("stock_items")
+      .select("*, suppliers(name), part_details(*), tyre_details(*)")
+      .eq("id", id)
+      .maybeSingle(),
+    supabase
+      .from("stock_movements")
+      .select("*, jobs(job_number)")
+      .eq("stock_item_id", id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("consignment_stock_lots")
+      .select("*")
+      .eq("stock_item_id", id)
+      .order("received_at", { ascending: false }),
+    supabase
+      .from("black_circle_stock_lots")
+      .select("id, quantity, received_at, status, used_at, returned_at, jobs(id, job_number)")
+      .eq("stock_item_id", id)
+      .order("received_at", { ascending: false }),
+    supabase
+      .from("jobs")
+      .select("id, job_number, vehicle_registration")
+      .eq("status", "open")
+      .order("created_at", { ascending: false }),
+  ])
   const canManageStock = staff?.canManageStock ?? false
 
   if (!item) notFound()
   const stockItem = item as unknown as StockItemWithDetails
   const lots = (consignmentLots ?? []) as ConsignmentStockLotRow[]
+  const bcLots = (blackCircleLots ?? []) as unknown as BlackCircleLotWithJob[]
+  // "On account" badge reflects money currently owed, not the catalogue
+  // is_consignment flag (Sept 2026: "Stock should be marked as 'On
+  // Account' if it has not been paid for") — a lot only ever reaches
+  // 'committed' once it's actually owed (see on-account/receive/
+  // actions.ts), so "committed and unpaid" is exactly "owed right now".
+  const owesOnAccountPayment = lots.some((lot) => lot.status === "committed" && !lot.paid_at)
 
   return (
     <div className="flex flex-col gap-4">
@@ -78,9 +108,14 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
         <Badge variant={stockItem.item_type === "part" ? "part" : "tyre"}>
           {stockItem.item_type}
         </Badge>
-        {stockItem.is_consignment && (
+        {owesOnAccountPayment && (
           <Badge variant="outline" className="normal-case">
             on account
+          </Badge>
+        )}
+        {stockItem.is_black_circle && (
+          <Badge variant="outline" className="normal-case">
+            black circle
           </Badge>
         )}
         {stockItem.is_non_returnable && (
@@ -96,11 +131,6 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
           {error}
         </p>
       )}
-      {committed && (
-        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
-          ✓ Committed to stock — payment is now due within 30 days.
-        </p>
-      )}
       {returnedLot && (
         <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
           ✓ On-account item returned to supplier.
@@ -109,6 +139,16 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
       {paid && (
         <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
           ✓ Marked as paid.
+        </p>
+      )}
+      {bcUsed && (
+        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
+          ✓ Black Circle tyre marked as used.
+        </p>
+      )}
+      {bcReturned && (
+        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
+          ✓ Black Circle stock returned to supplier.
         </p>
       )}
 
@@ -173,7 +213,19 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
             <CardTitle>Record usage</CardTitle>
           </CardHeader>
           <CardContent>
-            {(openJobs ?? []).length === 0 ? (
+            {stockItem.is_black_circle ? (
+              <p className="text-sm text-muted-foreground">
+                Black Circle stock can only be used against the job it was received for — see the
+                &quot;Black Circle stock&quot; card below, or the{" "}
+                <Link
+                  href="/dashboard/stock/black-circle"
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  Black Circle stock report
+                </Link>
+                .
+              </p>
+            ) : (openJobs ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No open jobs — usage must be recorded against a job now.{" "}
                 <Link href="/dashboard/jobs/new" className="font-medium underline-offset-4 hover:underline">
@@ -275,10 +327,13 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="px-2 py-1.5 font-medium">Received</th>
+                  <th className="px-2 py-1.5 font-medium">Invoice #</th>
+                  <th className="px-2 py-1.5 font-medium">Car reg</th>
                   <th className="px-2 py-1.5 text-right font-medium">Qty</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Cost</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Price exc. VAT</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Price inc. VAT</th>
                   <th className="px-2 py-1.5 font-medium">Status</th>
-                  <th className="px-2 py-1.5 font-medium">Due back</th>
+                  <th className="px-2 py-1.5 font-medium">Return deadline</th>
                   <th className="px-2 py-1.5 font-medium">Payment</th>
                   {canManageStock && <th className="px-2 py-1.5 font-medium">Actions</th>}
                 </tr>
@@ -289,57 +344,49 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                     <td className="px-2 py-1.5 whitespace-nowrap">
                       {new Date(lot.received_at).toLocaleDateString("en-GB")}
                     </td>
+                    <td className="px-2 py-1.5">{lot.invoice_number ?? "—"}</td>
+                    <td className="px-2 py-1.5">{lot.vehicle_registration ?? "—"}</td>
                     <td className="px-2 py-1.5 text-right">{lot.quantity}</td>
                     <td className="px-2 py-1.5 text-right">£{lot.cost_price.toFixed(2)}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      {lot.price_inc_vat != null ? `£${lot.price_inc_vat.toFixed(2)}` : "—"}
+                    </td>
                     <td className="px-2 py-1.5">
                       <Badge variant="outline" className="normal-case">
                         {lotStatusLabel(lot.status)}
                       </Badge>
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
-                      {lot.status === "on_consignment"
+                      {lot.status !== "returned"
                         ? new Date(lot.due_back_at).toLocaleDateString("en-GB")
                         : "—"}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
-                      {lot.status === "committed"
-                        ? lot.paid_at
+                      {lot.status === "returned"
+                        ? "—"
+                        : lot.paid_at
                           ? `Paid ${new Date(lot.paid_at).toLocaleDateString("en-GB")}`
                           : `Due ${
                               lot.payment_due_date
                                 ? new Date(lot.payment_due_date).toLocaleDateString("en-GB")
                                 : "—"
-                            }`
-                        : "—"}
+                            }`}
                     </td>
                     {canManageStock && (
                       <td className="px-2 py-1.5">
                         <div className="flex flex-wrap gap-1.5">
-                          {lot.status === "on_consignment" && (
-                            <>
-                              <form action={commitConsignmentLot}>
-                                <input type="hidden" name="lot_id" value={lot.id} />
-                                <input
-                                  type="hidden"
-                                  name="redirect_to"
-                                  value={`/dashboard/stock/${stockItem.id}`}
-                                />
-                                <SubmitButton size="sm" variant="outline" pendingText="Committing…">
-                                  Commit to stock
-                                </SubmitButton>
-                              </form>
-                              <form action={returnConsignmentLot}>
-                                <input type="hidden" name="lot_id" value={lot.id} />
-                                <input
-                                  type="hidden"
-                                  name="redirect_to"
-                                  value={`/dashboard/stock/${stockItem.id}`}
-                                />
-                                <SubmitButton size="sm" variant="outline" pendingText="Returning…">
-                                  Return to supplier
-                                </SubmitButton>
-                              </form>
-                            </>
+                          {lot.status !== "returned" && !lot.paid_at && (
+                            <form action={returnConsignmentLot}>
+                              <input type="hidden" name="lot_id" value={lot.id} />
+                              <input
+                                type="hidden"
+                                name="redirect_to"
+                                value={`/dashboard/stock/${stockItem.id}`}
+                              />
+                              <SubmitButton size="sm" variant="outline" pendingText="Returning…">
+                                Return to supplier
+                              </SubmitButton>
+                            </form>
                           )}
                           {lot.status === "committed" && !lot.paid_at && (
                             <form action={markConsignmentLotPaid}>
@@ -362,10 +409,109 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                 {lots.length === 0 && (
                   <tr>
                     <td
-                      colSpan={canManageStock ? 7 : 6}
+                      colSpan={canManageStock ? 10 : 9}
                       className="px-2 py-6 text-center text-muted-foreground"
                     >
                       No on-account stock recorded for this product yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {(stockItem.is_black_circle || bcLots.length > 0) && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle>Black Circle stock</CardTitle>
+            {stockItem.is_black_circle && canManageStock && (
+              <Button asChild size="sm" variant="outline">
+                <Link
+                  href={`/dashboard/stock/black-circle/receive?id=${encodeURIComponent(
+                    stockItem.id_number
+                  )}`}
+                >
+                  Add Black Circle stock
+                </Link>
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="px-2 py-1.5 font-medium">Received</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Qty</th>
+                  <th className="px-2 py-1.5 font-medium">Job</th>
+                  <th className="px-2 py-1.5 font-medium">Status</th>
+                  {canManageStock && <th className="px-2 py-1.5 font-medium">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {bcLots.map((lot) => (
+                  <tr key={lot.id} className="border-b last:border-0">
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {new Date(lot.received_at).toLocaleDateString("en-GB")}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">{lot.quantity}</td>
+                    <td className="px-2 py-1.5">
+                      {lot.jobs ? (
+                        <Link
+                          href={`/dashboard/jobs/${lot.jobs.id}`}
+                          className="font-medium underline-offset-4 hover:underline"
+                        >
+                          {lot.jobs.job_number}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Badge variant="outline" className="normal-case">
+                        {lot.status.replace("_", " ")}
+                      </Badge>
+                    </td>
+                    {canManageStock && (
+                      <td className="px-2 py-1.5">
+                        {lot.status === "in_stock" && (
+                          <div className="flex flex-wrap gap-1.5">
+                            <form action={useBlackCircleLot}>
+                              <input type="hidden" name="lot_id" value={lot.id} />
+                              <input
+                                type="hidden"
+                                name="redirect_to"
+                                value={`/dashboard/stock/${stockItem.id}`}
+                              />
+                              <SubmitButton size="sm" variant="outline" pendingText="Saving…">
+                                Mark used
+                              </SubmitButton>
+                            </form>
+                            <form action={returnBlackCircleLot}>
+                              <input type="hidden" name="lot_id" value={lot.id} />
+                              <input
+                                type="hidden"
+                                name="redirect_to"
+                                value={`/dashboard/stock/${stockItem.id}`}
+                              />
+                              <SubmitButton size="sm" variant="outline" pendingText="Returning…">
+                                Return to supplier
+                              </SubmitButton>
+                            </form>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+                {bcLots.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={canManageStock ? 5 : 4}
+                      className="px-2 py-6 text-center text-muted-foreground"
+                    >
+                      No Black Circle stock recorded for this product yet.
                     </td>
                   </tr>
                 )}

@@ -55,8 +55,20 @@ function matchesTypeFilters(item: StockItemWithDetails, params: StockSearchParam
 // here to verify comparing two columns (quantity_on_hand vs
 // ideal_stock_level) via PostgREST syntax, and it's cheap in-memory work
 // at this catalogue's scale regardless.
-function matchesStockStatus(item: StockItemWithDetails, params: StockSearchParams) {
-  if (params.consignment_only === "true" && !item.is_consignment) return false
+//
+// "On account only" now means "currently owes payment" (owesPaymentIds),
+// not the static is_consignment catalogue flag — kept consistent with
+// the "on account" badge below, which changed for the same reason (Sept
+// 2026: "Stock should be marked as 'On Account' if it has not been paid
+// for"). A product can still be an on-account *type* of product between
+// lots (nothing currently owed) — this filter is about money owed right
+// now, same as the badge.
+function matchesStockStatus(
+  item: StockItemWithDetails,
+  params: StockSearchParams,
+  owesPaymentIds: Set<string>
+) {
+  if (params.consignment_only === "true" && !owesPaymentIds.has(item.id)) return false
 
   if (params.stock_status === "out" && item.quantity_on_hand > 0) return false
   if (params.stock_status === "low" && item.quantity_on_hand >= item.ideal_stock_level) {
@@ -107,37 +119,48 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
   const supabase = await createClient()
 
   // getCurrentStaff() doesn't depend on the suppliers/stock queries (or
-  // vice versa), so run all three concurrently. See the perf note in
+  // vice versa), so run all four concurrently. See the perf note in
   // CLAUDE.md.
-  const [staff, { data: suppliers }, stockQuery, { count: stockTakesThisMonth }] =
-    await Promise.all([
-      getCurrentStaff(),
-      supabase.from("suppliers").select("id, name").order("name"),
-      (() => {
-        let query = supabase
-          .from("stock_items")
-          .select("*, suppliers(name), part_details(*), tyre_details(*)")
-          .eq("is_active", true)
-          .order("name")
+  const [
+    staff,
+    { data: suppliers },
+    stockQuery,
+    { count: stockTakesThisMonth },
+    { data: unpaidLots },
+  ] = await Promise.all([
+    getCurrentStaff(),
+    supabase.from("suppliers").select("id, name").order("name"),
+    (() => {
+      let query = supabase
+        .from("stock_items")
+        .select("*, suppliers(name), part_details(*), tyre_details(*)")
+        .eq("is_active", true)
+        .order("name")
 
-        if (searchParams.item_type) {
-          query = query.eq("item_type", searchParams.item_type)
-        }
-        if (searchParams.supplier_id) {
-          query = query.eq("supplier_id", searchParams.supplier_id)
-        }
-        if (searchParams.q) {
-          const q = searchParams.q.replace(/[%,]/g, "")
-          query = query.or(`id_number.ilike.%${q}%,name.ilike.%${q}%`)
-        }
-        return query
-      })(),
-      supabase
-        .from("stock_takes")
-        .select("id", { count: "exact", head: true })
-        .gte("started_at", new Date(new Date().setDate(1)).toISOString()),
-    ])
+      if (searchParams.item_type) {
+        query = query.eq("item_type", searchParams.item_type)
+      }
+      if (searchParams.supplier_id) {
+        query = query.eq("supplier_id", searchParams.supplier_id)
+      }
+      if (searchParams.q) {
+        const q = searchParams.q.replace(/[%,]/g, "")
+        query = query.or(`id_number.ilike.%${q}%,name.ilike.%${q}%`)
+      }
+      return query
+    })(),
+    supabase
+      .from("stock_takes")
+      .select("id", { count: "exact", head: true })
+      .gte("started_at", new Date(new Date().setDate(1)).toISOString()),
+    // Drives the dynamic "on account" badge/filter below — a product only
+    // shows as on-account while it actually owes payment (status
+    // 'committed', not yet paid), not just because it's catalogued as an
+    // on-account product type. See the comment on matchesStockStatus.
+    supabase.from("consignment_stock_lots").select("stock_item_id").eq("status", "committed").is("paid_at", null),
+  ])
   const canManageStock = staff?.canManageStock ?? false
+  const owesPaymentIds = new Set((unpaidLots ?? []).map((l) => l.stock_item_id))
 
   const { data, error } = stockQuery
   // Type-specific filters (make/model, tyre size/season/tier/commercial)
@@ -147,7 +170,8 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
   // catalogue grows large enough that this needs to move server-side.
   const allItems = (data ?? []) as unknown as StockItemWithDetails[]
   const items = allItems.filter(
-    (item) => matchesTypeFilters(item, searchParams) && matchesStockStatus(item, searchParams)
+    (item) =>
+      matchesTypeFilters(item, searchParams) && matchesStockStatus(item, searchParams, owesPaymentIds)
   )
 
   const totalItems = allItems.length
@@ -187,6 +211,9 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                 <Link href="/dashboard/stock/on-account/pending-payments">
                   Pending payments
                 </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/dashboard/stock/black-circle">Black Circle stock</Link>
               </Button>
               <Button asChild size="lg">
                 <Link href="/dashboard/stock/new">
@@ -290,9 +317,14 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                       {item.item_type}
                     </Badge>
                     <span className="font-semibold">{item.name}</span>
-                    {item.is_consignment && (
+                    {owesPaymentIds.has(item.id) && (
                       <Badge variant="outline" className="normal-case">
                         on account
+                      </Badge>
+                    )}
+                    {item.is_black_circle && (
+                      <Badge variant="outline" className="normal-case">
+                        black circle
                       </Badge>
                     )}
                   </div>
@@ -348,6 +380,16 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                           className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
                         >
                           Add on-account stock
+                        </Link>
+                      )}
+                      {item.is_black_circle && (
+                        <Link
+                          href={`/dashboard/stock/black-circle/receive?id=${encodeURIComponent(
+                            item.id_number
+                          )}`}
+                          className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
+                        >
+                          Add Black Circle stock
                         </Link>
                       )}
                     </td>
