@@ -1,3 +1,4 @@
+import Image from "next/image"
 import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
@@ -10,28 +11,26 @@ export async function SiteHeader() {
   const staff = await getCurrentStaff()
   const user = staff ? { email: staff.email } : null
   const role = staff?.role ?? null
+  const canManageStock = staff?.canManageStock ?? false
 
   return (
     <header className="border-b bg-card print:hidden">
       <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex items-center gap-9">
           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
-              </svg>
-            </span>
-            <span className="font-heading text-lg font-bold tracking-tight">
-              Rivermead Stock Manager
+            <Image
+              src="/logo.png"
+              alt="Rivermead Garage Automotive"
+              width={450}
+              height={295}
+              priority
+              className="h-11 w-auto shrink-0"
+            />
+            <span className="hidden font-heading text-sm font-bold tracking-wide text-muted-foreground uppercase sm:inline">
+              Stock Manager
             </span>
           </Link>
-          {user && <SiteNav className="hidden sm:flex" />}
+          {user && <SiteNav className="hidden sm:flex" canManageStock={canManageStock} />}
         </div>
         {user && (
           <div className="flex items-center gap-3 text-sm">
@@ -50,7 +49,10 @@ export async function SiteHeader() {
         )}
       </div>
       {user && (
-        <SiteNav className="overflow-x-auto border-t px-4 py-2 sm:hidden" />
+        <SiteNav
+          className="overflow-x-auto border-t px-4 py-2 sm:hidden"
+          canManageStock={canManageStock}
+        />
       )}
     </header>
   )

@@ -1,3 +1,5 @@
+import Image from "next/image"
+
 import {
   Card,
   CardContent,
@@ -19,7 +21,8 @@ export default async function LoginPage(props: PageProps<"/login">) {
     typeof searchParams.next === "string" ? searchParams.next : "/dashboard"
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/40 p-4">
+      <Image src="/logo.png" alt="Rivermead Garage Automotive" width={450} height={295} priority className="h-20 w-auto" />
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>

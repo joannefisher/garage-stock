@@ -4,68 +4,78 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system: "Bold & Vibrant" — chosen by Joanne from the 3 mockups
- * shown at claude/garage-stock-ui-directions (Sept 2026). Space Grotesk
- * for headings/emphasis, Manrope for body text; warm off-white ground,
- * a vivid orange accent, a violet secondary accent (used for "PART"
- * badges), color-blocked stat tiles, pill-shaped nav/badges/inputs, and
- * generally rounder, bolder shapes than the original shadcn defaults.
- * Source reference: /home/claude/garage-stock-designs/Main.dc.html.
+ * Design system: "Rivermead Black & Gold" (Sept 2026) — replaces "Bold &
+ * Vibrant" to match the Rivermead Garage logo (public/logo.png): a black
+ * ground with the logo's gold script and silver-metal tool linework read
+ * straight off it, no invert needed. Electric blue and a warm red serve
+ * as the "complementary highlight" colors alongside gold (part badges /
+ * stat tiles / destructive actions), so the palette isn't gold-on-black
+ * alone. Space Grotesk (headings) + Manrope (body) unchanged; shapes
+ * (rounded-full pills, rounded-2xl cards, rounded-xl inputs) unchanged.
+ *
+ * There's no light/dark toggle in this app — `.dark` is made the *only*
+ * theme (applied unconditionally via the `dark` class on <html> in
+ * layout.tsx) rather than adding a second color story nobody asked for.
+ * `:root` carries the same values so the tokens are still correct if
+ * anything ever renders outside that class (e.g. an isolated component
+ * test). A few `dark:text-green-*` utility classes already scattered
+ * through the app (confirmation banners) now activate for free since
+ * `.dark` is genuinely applied.
  */
 
 :root {
   --radius: 1rem;
-  --background: oklch(0.98 0.01 80);
-  --foreground: oklch(0.22 0.02 80);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.02 80);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.02 80);
-  --primary: oklch(0.72 0.19 55);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.015 80);
-  --secondary-foreground: oklch(0.32 0.02 80);
-  --muted: oklch(0.96 0.01 80);
-  --muted-foreground: oklch(0.5 0.02 80);
-  --accent: oklch(0.95 0.015 80);
-  --accent-foreground: oklch(0.22 0.02 80);
-  --destructive: oklch(0.6 0.22 25);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.91 0.015 80);
-  --input: oklch(0.91 0.015 80);
-  --ring: oklch(0.72 0.19 55 / 0.5);
+  --background: oklch(0.16 0.01 70);
+  --foreground: oklch(0.94 0.004 90);
+  --card: oklch(0.205 0.008 70);
+  --card-foreground: oklch(0.94 0.004 90);
+  --popover: oklch(0.205 0.008 70);
+  --popover-foreground: oklch(0.94 0.004 90);
+  --primary: oklch(0.83 0.16 95);
+  --primary-foreground: oklch(0.16 0.01 70);
+  --secondary: oklch(0.28 0.008 80);
+  --secondary-foreground: oklch(0.94 0.004 90);
+  --muted: oklch(0.24 0.008 80);
+  --muted-foreground: oklch(0.68 0.015 85);
+  --accent: oklch(0.28 0.01 85);
+  --accent-foreground: oklch(0.94 0.004 90);
+  --destructive: oklch(0.65 0.21 27);
+  --destructive-foreground: oklch(0.98 0.005 90);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.83 0.16 95 / 0.5);
 
   /* Extra brand tokens beyond shadcn's default set. */
-  --violet: oklch(0.62 0.19 290);
-  --violet-foreground: oklch(1 0 0);
-  --tile-dark: oklch(0.22 0.02 80);
-  --tile-dark-foreground: oklch(1 0 0);
+  --violet: oklch(0.64 0.19 264);
+  --violet-foreground: oklch(0.98 0 0);
+  --tile-dark: oklch(0.08 0.004 70);
+  --tile-dark-foreground: oklch(0.94 0.004 90);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.72 0.19 55);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --violet: oklch(0.62 0.19 290);
-  --violet-foreground: oklch(0.985 0 0);
-  --tile-dark: oklch(0.12 0.01 80);
-  --tile-dark-foreground: oklch(0.985 0 0);
+  --background: oklch(0.16 0.01 70);
+  --foreground: oklch(0.94 0.004 90);
+  --card: oklch(0.205 0.008 70);
+  --card-foreground: oklch(0.94 0.004 90);
+  --popover: oklch(0.205 0.008 70);
+  --popover-foreground: oklch(0.94 0.004 90);
+  --primary: oklch(0.83 0.16 95);
+  --primary-foreground: oklch(0.16 0.01 70);
+  --secondary: oklch(0.28 0.008 80);
+  --secondary-foreground: oklch(0.94 0.004 90);
+  --muted: oklch(0.24 0.008 80);
+  --muted-foreground: oklch(0.68 0.015 85);
+  --accent: oklch(0.28 0.01 85);
+  --accent-foreground: oklch(0.94 0.004 90);
+  --destructive: oklch(0.65 0.21 27);
+  --destructive-foreground: oklch(0.98 0.005 90);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.83 0.16 95 / 0.5);
+  --violet: oklch(0.64 0.19 264);
+  --violet-foreground: oklch(0.98 0 0);
+  --tile-dark: oklch(0.08 0.004 70);
+  --tile-dark-foreground: oklch(0.94 0.004 90);
 }
 
 @theme inline {

@@ -21,7 +21,16 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
   }
 
   const supabase = await createClient()
-  const { data: suppliers } = await supabase.from("suppliers").select("id, name").order("name")
+  // Only active suppliers are offered for a brand-new product — a
+  // deactivated supplier (see /dashboard/settings/suppliers) shouldn't be
+  // pickable going forward, though existing items that already reference
+  // one are unaffected (filter/report dropdowns elsewhere intentionally
+  // still list every supplier so historical data stays filterable).
+  const { data: suppliers } = await supabase
+    .from("suppliers")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("name")
 
   return (
     <div className="flex flex-col gap-4">

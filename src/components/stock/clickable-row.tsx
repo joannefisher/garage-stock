@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation"
  * this is a small client component doing `router.push` on click instead.
  *
  * Clicks that land on a nested interactive element (the ID link, an
- * "Add consignment stock" action link, a future per-row form/button) are
+ * "Add on-account stock" action link, a future per-row form/button) are
  * left alone via `closest()` — otherwise every such control would either
  * double-navigate or get its own click swallowed by the row's handler.
  */

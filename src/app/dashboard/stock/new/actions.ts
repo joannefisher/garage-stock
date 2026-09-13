@@ -5,7 +5,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { friendlyDbError } from "@/lib/supabase/errors"
-import type { StockItemType, TyreSeason, TyreTier } from "@/types/database.types"
+import type { StockItemType, TyreLoadRating, TyreSeason, TyreTier } from "@/types/database.types"
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim()
@@ -98,8 +98,7 @@ export async function createStockItem(formData: FormData) {
           rim_diameter: num(formData, "rim_diameter"),
           load_index: optionalStr(formData, "load_index"),
           speed_rating: optionalStr(formData, "speed_rating"),
-          is_xl: formData.get("is_xl") === "on",
-          is_commercial: formData.get("is_commercial") === "on",
+          load_rating: str(formData, "load_rating") as TyreLoadRating,
           season: str(formData, "season") as TyreSeason,
           tier: str(formData, "tier") as TyreTier,
           brand: optionalStr(formData, "brand"),

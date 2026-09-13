@@ -40,10 +40,9 @@ function matchesTypeFilters(item: StockItemWithDetails, params: StockSearchParam
     }
     if (params.tyre_season && td.season !== params.tyre_season) return false
     if (params.tyre_tier && td.tier !== params.tyre_tier) return false
-    if (params.tyre_commercial) {
-      const wantCommercial = params.tyre_commercial === "true"
-      if (td.is_commercial !== wantCommercial) return false
-    }
+    // "All" (no value) means no filter — see the Load Rated select in
+    // stock-filters.tsx.
+    if (params.tyre_load_rating && td.load_rating !== params.tyre_load_rating) return false
   }
 
   return true
@@ -185,7 +184,7 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                 <Link href="/dashboard/stock/receive">Receive stock</Link>
               </Button>
               <Button asChild variant="outline" size="lg">
-                <Link href="/dashboard/stock/consignment/pending-payments">
+                <Link href="/dashboard/stock/on-account/pending-payments">
                   Pending payments
                 </Link>
               </Button>
@@ -293,7 +292,7 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                     <span className="font-semibold">{item.name}</span>
                     {item.is_consignment && (
                       <Badge variant="outline" className="normal-case">
-                        consignment
+                        on account
                       </Badge>
                     )}
                   </div>
@@ -305,7 +304,16 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                         .join(" ") || item.vehicle_note
                     : null}
                   {item.item_type === "tyre" && item.tyre_details
-                    ? `${item.tyre_details.size_label} · ${item.tyre_details.season} · ${item.tyre_details.tier}`
+                    ? [
+                        item.tyre_details.size_label,
+                        item.tyre_details.season,
+                        item.tyre_details.tier,
+                        item.tyre_details.load_rating !== "standard"
+                          ? item.tyre_details.load_rating.toUpperCase()
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
                     : null}
                 </td>
                 <td className="px-4 py-3.5 text-muted-foreground">
@@ -334,12 +342,12 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                     <td className="px-4 py-3.5">
                       {item.is_consignment && (
                         <Link
-                          href={`/dashboard/stock/consignment/receive?id=${encodeURIComponent(
+                          href={`/dashboard/stock/on-account/receive?id=${encodeURIComponent(
                             item.id_number
                           )}`}
                           className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
                         >
-                          Add consignment stock
+                          Add on-account stock
                         </Link>
                       )}
                     </td>

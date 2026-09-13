@@ -27,7 +27,7 @@ export function PendingPaymentsFilters({ suppliers }: { suppliers: SupplierOptio
       }
     }
     startTransition(() => {
-      router.push(`/dashboard/stock/consignment/pending-payments?${params.toString()}`)
+      router.push(`/dashboard/stock/on-account/pending-payments?${params.toString()}`)
     })
   }
 

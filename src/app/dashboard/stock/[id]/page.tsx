@@ -16,7 +16,7 @@ import {
   commitConsignmentLot,
   markConsignmentLotPaid,
   returnConsignmentLot,
-} from "../consignment/actions"
+} from "../on-account/actions"
 import { recordAdjustment, recordUsage } from "./actions"
 
 // Supabase client typing degrades an embedded-resource select (`jobs(...)`)
@@ -80,7 +80,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
         </Badge>
         {stockItem.is_consignment && (
           <Badge variant="outline" className="normal-case">
-            consignment
+            on account
           </Badge>
         )}
         {stockItem.is_non_returnable && (
@@ -103,7 +103,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
       )}
       {returnedLot && (
         <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
-          ✓ Consignment lot returned to supplier.
+          ✓ On-account item returned to supplier.
         </p>
       )}
       {paid && (
@@ -157,13 +157,8 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                 <Row label="Season" value={stockItem.tyre_details.season} />
                 <Row label="Tier" value={stockItem.tyre_details.tier} />
                 <Row
-                  label="Flags"
-                  value={[
-                    stockItem.tyre_details.is_xl ? "XL" : null,
-                    stockItem.tyre_details.is_commercial ? "Commercial" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || "—"}
+                  label="Load rated"
+                  value={loadRatingLabel(stockItem.tyre_details.load_rating)}
                 />
                 <Row label="Brand / pattern" value={`${stockItem.tyre_details.brand ?? "—"} ${stockItem.tyre_details.pattern ?? ""}`} />
               </>
@@ -262,15 +257,15 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
       {(stockItem.is_consignment || lots.length > 0) && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle>Consignment stock</CardTitle>
+            <CardTitle>On account stock</CardTitle>
             {stockItem.is_consignment && canManageStock && (
               <Button asChild size="sm" variant="outline">
                 <Link
-                  href={`/dashboard/stock/consignment/receive?id=${encodeURIComponent(
+                  href={`/dashboard/stock/on-account/receive?id=${encodeURIComponent(
                     stockItem.id_number
                   )}`}
                 >
-                  Add consignment stock
+                  Add on-account stock
                 </Link>
               </Button>
             )}
@@ -298,7 +293,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                     <td className="px-2 py-1.5 text-right">£{lot.cost_price.toFixed(2)}</td>
                     <td className="px-2 py-1.5">
                       <Badge variant="outline" className="normal-case">
-                        {lot.status.replace("_", " ")}
+                        {lotStatusLabel(lot.status)}
                       </Badge>
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
@@ -370,7 +365,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                       colSpan={canManageStock ? 7 : 6}
                       className="px-2 py-6 text-center text-muted-foreground"
                     >
-                      No consignment stock recorded for this product yet.
+                      No on-account stock recorded for this product yet.
                     </td>
                   </tr>
                 )}
@@ -440,4 +435,18 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="text-right font-medium">{value}</span>
     </div>
   )
+}
+
+// The stored status is still "on_consignment" (consignment_lot_status,
+// 0011_consignment_stock_lots.sql) — renaming the enum itself would mean a
+// migration for a label-only change, so this just maps it to the "On
+// Account" wording used everywhere in the UI (Sept 2026 rename).
+function lotStatusLabel(status: string): string {
+  if (status === "on_consignment") return "on account"
+  return status.replace("_", " ")
+}
+
+function loadRatingLabel(rating: string): string {
+  if (rating === "xl") return "XL"
+  return rating.charAt(0).toUpperCase() + rating.slice(1)
 }

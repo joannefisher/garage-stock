@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { Space_Grotesk, Manrope, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-// Design system fonts (Bold & Vibrant, chosen Sept 2026 — see globals.css
-// header comment). Space Grotesk for headings/emphasis, Manrope for body
-// copy. Geist Mono kept around for any monospace/code-ish display; nothing
-// in the app currently renders in it.
+// Design system fonts ("Rivermead Black & Gold", Sept 2026 — see
+// globals.css header comment). Space Grotesk for headings/emphasis,
+// Manrope for body copy. Geist Mono kept around for any monospace/
+// code-ish display; nothing in the app currently renders in it.
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-heading",
   subsets: ["latin"],
@@ -32,7 +32,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${manrope.variable} ${geistMono.variable} h-full antialiased`}
+      // `dark` is applied unconditionally — there's no light/dark toggle in
+      // this app, and the black & gold theme (globals.css) *is* the .dark
+      // block. See that file's header comment.
+      className={`dark ${spaceGrotesk.variable} ${manrope.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

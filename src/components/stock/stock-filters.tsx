@@ -103,7 +103,7 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
               value="true"
               defaultChecked={searchParams.get("consignment_only") === "true"}
             />
-            Consignment only
+            On account only
           </label>
         </div>
 
@@ -198,16 +198,17 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
             </select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="tyre_commercial">Commercial</Label>
+            <Label htmlFor="tyre_load_rating">Load rated</Label>
             <select
-              id="tyre_commercial"
-              name="tyre_commercial"
-              defaultValue={searchParams.get("tyre_commercial") ?? ""}
+              id="tyre_load_rating"
+              name="tyre_load_rating"
+              defaultValue={searchParams.get("tyre_load_rating") ?? ""}
               className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             >
-              <option value="">Any</option>
-              <option value="true">Commercial (XL)</option>
-              <option value="false">Standard</option>
+              <option value="">All</option>
+              <option value="commercial">Commercial</option>
+              <option value="xl">XL</option>
+              <option value="standard">Standard</option>
             </select>
           </div>
         </div>

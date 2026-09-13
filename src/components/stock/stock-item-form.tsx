@@ -112,7 +112,7 @@ export function StockItemForm({
         <div className="flex items-center gap-2">
           <input id="is_consignment" name="is_consignment" type="checkbox" />
           <Label htmlFor="is_consignment">
-            Consignment (loaned from supplier, not owned)
+            On account (loaned from supplier, not owned)
           </Label>
         </div>
 
@@ -195,13 +195,18 @@ export function StockItemForm({
               <option value="premium">Premium</option>
             </select>
           </div>
-          <div className="flex items-center gap-2">
-            <input id="is_xl" name="is_xl" type="checkbox" />
-            <Label htmlFor="is_xl">XL / reinforced</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <input id="is_commercial" name="is_commercial" type="checkbox" />
-            <Label htmlFor="is_commercial">Commercial</Label>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="load_rating">Load rated</Label>
+            <select
+              id="load_rating"
+              name="load_rating"
+              defaultValue="standard"
+              className={selectClass}
+            >
+              <option value="standard">Standard</option>
+              <option value="xl">XL</option>
+              <option value="commercial">Commercial</option>
+            </select>
           </div>
         </fieldset>
       )}

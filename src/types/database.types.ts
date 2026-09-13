@@ -1,5 +1,5 @@
 /**
- * Hand-written types matching supabase/migrations/0001-0013.
+ * Hand-written types matching supabase/migrations/0001-0014.
  *
  * Once your Supabase project is linked, regenerate the real (guaranteed
  * accurate) types and replace this file entirely:
@@ -26,6 +26,9 @@ export type StaffRole = "admin" | "manager" | "mechanic" | "staff"
 export type StockItemType = "part" | "tyre"
 export type TyreSeason = "summer" | "winter" | "all_season"
 export type TyreTier = "budget" | "mid_range" | "premium"
+// Replaces the old is_xl/is_commercial booleans (0014_tyre_load_rating.sql,
+// Sept 2026 "Load Rated" rename) — one tyre has exactly one load rating.
+export type TyreLoadRating = "standard" | "xl" | "commercial"
 export type StockMovementType =
   | "initial"
   | "goods_in"
@@ -170,8 +173,7 @@ export type TyreDetailsRow = {
   size_label: string // generated column — read-only
   load_index: string | null
   speed_rating: string | null
-  is_xl: boolean
-  is_commercial: boolean
+  load_rating: TyreLoadRating
   season: TyreSeason
   tier: TyreTier
   brand: string | null
@@ -184,8 +186,7 @@ export type TyreDetailsInsert = {
   rim_diameter: number
   load_index?: string | null
   speed_rating?: string | null
-  is_xl?: boolean
-  is_commercial?: boolean
+  load_rating?: TyreLoadRating
   season?: TyreSeason
   tier?: TyreTier
   brand?: string | null
@@ -778,6 +779,7 @@ export type Database = {
       stock_item_type: StockItemType
       tyre_season: TyreSeason
       tyre_tier: TyreTier
+      tyre_load_rating: TyreLoadRating
       stock_movement_type: StockMovementType
       purchase_order_status: PurchaseOrderStatus
       supplier_return_status: SupplierReturnStatus
