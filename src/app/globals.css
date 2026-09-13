@@ -4,52 +4,72 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system: "Rivermead Black & Gold" (Sept 2026) — replaces "Bold &
- * Vibrant" to match the Rivermead Garage logo (public/logo.png): a black
- * ground with the logo's gold script and silver-metal tool linework read
- * straight off it, no invert needed. Electric blue and a warm red serve
- * as the "complementary highlight" colors alongside gold (part badges /
- * stat tiles / destructive actions), so the palette isn't gold-on-black
- * alone. Space Grotesk (headings) + Manrope (body) unchanged; shapes
- * (rounded-full pills, rounded-2xl cards, rounded-xl inputs) unchanged.
+ * Design system: "Rivermead Black & Gold" (Sept 2026) — matches the
+ * Rivermead Garage logo (public/logo.png): black wordmark linework, gold
+ * script, on a light ground. This started as a black-background theme
+ * (`.dark` applied unconditionally) but Joanne asked for the black
+ * background to come back out; she then picked "Option A" from a
+ * two-option comparison — the header bar stays black (strong branding,
+ * the logo reads exactly as it does on the original black mockup) while
+ * the workspace below it is light. So `:root` is the light workspace
+ * theme, and a separate small set of `--header-*` tokens (below,
+ * intentionally black regardless of the page theme) style just
+ * `<SiteHeader>`/`<SiteNav>` — everything else uses the ordinary tokens.
+ * Electric blue and a warm red still serve as the "complementary
+ * highlight" colors alongside gold (stat tiles / part badges /
+ * destructive actions), so the palette isn't just gold-on-white. Space
+ * Grotesk (headings) + Manrope (body) unchanged; shapes (rounded-full
+ * pills, rounded-2xl cards, rounded-xl inputs) unchanged.
  *
- * There's no light/dark toggle in this app — `.dark` is made the *only*
- * theme (applied unconditionally via the `dark` class on <html> in
- * layout.tsx) rather than adding a second color story nobody asked for.
- * `:root` carries the same values so the tokens are still correct if
- * anything ever renders outside that class (e.g. an isolated component
- * test). A few `dark:text-green-*` utility classes already scattered
- * through the app (confirmation banners) now activate for free since
- * `.dark` is genuinely applied.
+ * There's still no light/dark toggle in this app — `:root` is the only
+ * page theme actually applied (no class on <html>, see layout.tsx).
+ * `.dark` below keeps the original all-black version of this same
+ * palette, unused for now, in case a toggle is ever wanted later — it's
+ * not legacy cruft, it's a real, previously-shipped theme kept on the
+ * shelf (its `--header-*` tokens just mirror its own card/border/muted
+ * tokens, since the header didn't need special treatment when the whole
+ * page was already black). A few `dark:text-green-*` utility classes
+ * scattered through the app (confirmation banners) are written against
+ * that pairing: text-green-700 for light mode, dark:text-green-400 for
+ * dark — they work correctly now that `:root` is light again.
  */
 
 :root {
   --radius: 1rem;
-  --background: oklch(0.16 0.01 70);
-  --foreground: oklch(0.94 0.004 90);
-  --card: oklch(0.205 0.008 70);
-  --card-foreground: oklch(0.94 0.004 90);
-  --popover: oklch(0.205 0.008 70);
-  --popover-foreground: oklch(0.94 0.004 90);
-  --primary: oklch(0.83 0.16 95);
+  --background: oklch(0.99 0.004 90);
+  --foreground: oklch(0.16 0.01 70);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.01 70);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.01 70);
+  --primary: oklch(0.78 0.16 95);
   --primary-foreground: oklch(0.16 0.01 70);
-  --secondary: oklch(0.28 0.008 80);
-  --secondary-foreground: oklch(0.94 0.004 90);
-  --muted: oklch(0.24 0.008 80);
-  --muted-foreground: oklch(0.68 0.015 85);
-  --accent: oklch(0.28 0.01 85);
-  --accent-foreground: oklch(0.94 0.004 90);
-  --destructive: oklch(0.65 0.21 27);
+  --secondary: oklch(0.95 0.006 85);
+  --secondary-foreground: oklch(0.16 0.01 70);
+  --muted: oklch(0.96 0.005 85);
+  --muted-foreground: oklch(0.48 0.012 80);
+  --accent: oklch(0.95 0.008 85);
+  --accent-foreground: oklch(0.16 0.01 70);
+  --destructive: oklch(0.6 0.21 27);
   --destructive-foreground: oklch(0.98 0.005 90);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.83 0.16 95 / 0.5);
+  --border: oklch(0.9 0.008 80);
+  --input: oklch(0.88 0.01 80);
+  --ring: oklch(0.78 0.16 95 / 0.5);
 
   /* Extra brand tokens beyond shadcn's default set. */
-  --violet: oklch(0.64 0.19 264);
+  --violet: oklch(0.6 0.19 264);
   --violet-foreground: oklch(0.98 0 0);
-  --tile-dark: oklch(0.08 0.004 70);
-  --tile-dark-foreground: oklch(0.94 0.004 90);
+  --tile-dark: oklch(0.16 0.01 70);
+  --tile-dark-foreground: oklch(0.97 0.004 90);
+
+  /* Header chrome — deliberately black even though the page is light
+     (see the file header comment: "Option A", black bar over a light
+     workspace). Same near-black as --tile-dark, kept as its own token
+     rather than reused so the header can be retuned independently. */
+  --header-background: oklch(0.16 0.01 70);
+  --header-foreground: oklch(0.94 0.004 90);
+  --header-border: oklch(1 0 0 / 12%);
+  --header-muted-foreground: oklch(0.72 0.015 85);
 }
 
 .dark {
@@ -76,6 +96,13 @@
   --violet-foreground: oklch(0.98 0 0);
   --tile-dark: oklch(0.08 0.004 70);
   --tile-dark-foreground: oklch(0.94 0.004 90);
+
+  /* The whole page is already black in this theme, so the header just
+     matches the surrounding chrome instead of needing its own colors. */
+  --header-background: var(--card);
+  --header-foreground: var(--card-foreground);
+  --header-border: var(--border);
+  --header-muted-foreground: var(--muted-foreground);
 }
 
 @theme inline {
@@ -107,6 +134,10 @@
   --color-violet-foreground: var(--violet-foreground);
   --color-tile-dark: var(--tile-dark);
   --color-tile-dark-foreground: var(--tile-dark-foreground);
+  --color-header-background: var(--header-background);
+  --color-header-foreground: var(--header-foreground);
+  --color-header-border: var(--header-border);
+  --color-header-muted-foreground: var(--header-muted-foreground);
 
   --font-sans: var(--font-body);
   --font-heading: var(--font-heading);

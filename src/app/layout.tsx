@@ -32,10 +32,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      // `dark` is applied unconditionally — there's no light/dark toggle in
-      // this app, and the black & gold theme (globals.css) *is* the .dark
-      // block. See that file's header comment.
-      className={`dark ${spaceGrotesk.variable} ${manrope.variable} ${geistMono.variable} h-full antialiased`}
+      // No `dark` class here — Joanne asked for the black background to
+      // come back out (Sept 2026), so the light `:root` palette in
+      // globals.css (white ground, black & gold accents) is what renders.
+      // `.dark` is kept defined (the original black theme) in case a
+      // toggle is ever wanted later, but nothing currently applies it.
+      className={`${spaceGrotesk.variable} ${manrope.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

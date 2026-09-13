@@ -41,10 +41,14 @@ export function SiteNav({
             key={link.label}
             href={link.href}
             className={cn(
+              // SiteNav only ever renders inside the (black) SiteHeader —
+              // see site-header.tsx — so its inactive/hover state is
+              // styled against --header-* tokens, not the page's own
+              // (light) text/secondary tokens.
               "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
               active
                 ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                : "text-header-muted-foreground hover:bg-white/10 hover:text-header-foreground"
             )}
           >
             {link.label}
