@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,8 +10,13 @@ import { SubmitButton } from "@/components/ui/submit-button"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockItemWithDetails } from "@/lib/stock/types"
-import type { StockMovementRow } from "@/types/database.types"
+import type { ConsignmentStockLotRow, StockMovementRow } from "@/types/database.types"
 
+import {
+  commitConsignmentLot,
+  markConsignmentLotPaid,
+  returnConsignmentLot,
+} from "../consignment/actions"
 import { recordAdjustment, recordUsage } from "./actions"
 
 // Supabase client typing degrades an embedded-resource select (`jobs(...)`)
@@ -24,36 +30,46 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
   const { id } = await props.params
   const searchParams = await props.searchParams
   const error = typeof searchParams.error === "string" ? searchParams.error : undefined
+  const committed = searchParams.committed === "1"
+  const returnedLot = searchParams.returned === "1"
+  const paid = searchParams.paid === "1"
 
   const supabase = await createClient()
 
-  // getCurrentStaff(), the item, its recent movements, and the list of
-  // open jobs to record usage against are all independent reads — they
-  // run as one parallel wave rather than four sequential round-trips. See
-  // the perf note in CLAUDE.md.
-  const [staff, { data: item }, { data: movements }, { data: openJobs }] = await Promise.all([
-    getCurrentStaff(),
-    supabase
-      .from("stock_items")
-      .select("*, suppliers(name), part_details(*), tyre_details(*)")
-      .eq("id", id)
-      .maybeSingle(),
-    supabase
-      .from("stock_movements")
-      .select("*, jobs(job_number)")
-      .eq("stock_item_id", id)
-      .order("created_at", { ascending: false })
-      .limit(20),
-    supabase
-      .from("jobs")
-      .select("id, job_number, vehicle_registration")
-      .eq("status", "open")
-      .order("created_at", { ascending: false }),
-  ])
+  // getCurrentStaff(), the item, its recent movements, its consignment
+  // lots, and the list of open jobs to record usage against are all
+  // independent reads — they run as one parallel wave rather than five
+  // sequential round-trips. See the perf note in CLAUDE.md.
+  const [staff, { data: item }, { data: movements }, { data: consignmentLots }, { data: openJobs }] =
+    await Promise.all([
+      getCurrentStaff(),
+      supabase
+        .from("stock_items")
+        .select("*, suppliers(name), part_details(*), tyre_details(*)")
+        .eq("id", id)
+        .maybeSingle(),
+      supabase
+        .from("stock_movements")
+        .select("*, jobs(job_number)")
+        .eq("stock_item_id", id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("consignment_stock_lots")
+        .select("*")
+        .eq("stock_item_id", id)
+        .order("received_at", { ascending: false }),
+      supabase
+        .from("jobs")
+        .select("id, job_number, vehicle_registration")
+        .eq("status", "open")
+        .order("created_at", { ascending: false }),
+    ])
   const canManageStock = staff?.canManageStock ?? false
 
   if (!item) notFound()
   const stockItem = item as unknown as StockItemWithDetails
+  const lots = (consignmentLots ?? []) as ConsignmentStockLotRow[]
 
   return (
     <div className="flex flex-col gap-4">
@@ -78,6 +94,21 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
       {error && (
         <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
+        </p>
+      )}
+      {committed && (
+        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
+          ✓ Committed to stock — payment is now due within 30 days.
+        </p>
+      )}
+      {returnedLot && (
+        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
+          ✓ Consignment lot returned to supplier.
+        </p>
+      )}
+      {paid && (
+        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
+          ✓ Marked as paid.
         </p>
       )}
 
@@ -227,6 +258,127 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
           </Card>
         )}
       </div>
+
+      {(stockItem.is_consignment || lots.length > 0) && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle>Consignment stock</CardTitle>
+            {stockItem.is_consignment && canManageStock && (
+              <Button asChild size="sm" variant="outline">
+                <Link
+                  href={`/dashboard/stock/consignment/receive?id=${encodeURIComponent(
+                    stockItem.id_number
+                  )}`}
+                >
+                  Add consignment stock
+                </Link>
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="px-2 py-1.5 font-medium">Received</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Qty</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Cost</th>
+                  <th className="px-2 py-1.5 font-medium">Status</th>
+                  <th className="px-2 py-1.5 font-medium">Due back</th>
+                  <th className="px-2 py-1.5 font-medium">Payment</th>
+                  {canManageStock && <th className="px-2 py-1.5 font-medium">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {lots.map((lot) => (
+                  <tr key={lot.id} className="border-b last:border-0">
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {new Date(lot.received_at).toLocaleDateString("en-GB")}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">{lot.quantity}</td>
+                    <td className="px-2 py-1.5 text-right">£{lot.cost_price.toFixed(2)}</td>
+                    <td className="px-2 py-1.5">
+                      <Badge variant="outline" className="normal-case">
+                        {lot.status.replace("_", " ")}
+                      </Badge>
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {lot.status === "on_consignment"
+                        ? new Date(lot.due_back_at).toLocaleDateString("en-GB")
+                        : "—"}
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {lot.status === "committed"
+                        ? lot.paid_at
+                          ? `Paid ${new Date(lot.paid_at).toLocaleDateString("en-GB")}`
+                          : `Due ${
+                              lot.payment_due_date
+                                ? new Date(lot.payment_due_date).toLocaleDateString("en-GB")
+                                : "—"
+                            }`
+                        : "—"}
+                    </td>
+                    {canManageStock && (
+                      <td className="px-2 py-1.5">
+                        <div className="flex flex-wrap gap-1.5">
+                          {lot.status === "on_consignment" && (
+                            <>
+                              <form action={commitConsignmentLot}>
+                                <input type="hidden" name="lot_id" value={lot.id} />
+                                <input
+                                  type="hidden"
+                                  name="redirect_to"
+                                  value={`/dashboard/stock/${stockItem.id}`}
+                                />
+                                <SubmitButton size="sm" variant="outline" pendingText="Committing…">
+                                  Commit to stock
+                                </SubmitButton>
+                              </form>
+                              <form action={returnConsignmentLot}>
+                                <input type="hidden" name="lot_id" value={lot.id} />
+                                <input
+                                  type="hidden"
+                                  name="redirect_to"
+                                  value={`/dashboard/stock/${stockItem.id}`}
+                                />
+                                <SubmitButton size="sm" variant="outline" pendingText="Returning…">
+                                  Return to supplier
+                                </SubmitButton>
+                              </form>
+                            </>
+                          )}
+                          {lot.status === "committed" && !lot.paid_at && (
+                            <form action={markConsignmentLotPaid}>
+                              <input type="hidden" name="lot_id" value={lot.id} />
+                              <input
+                                type="hidden"
+                                name="redirect_to"
+                                value={`/dashboard/stock/${stockItem.id}`}
+                              />
+                              <SubmitButton size="sm" variant="outline" pendingText="Saving…">
+                                Mark as paid
+                              </SubmitButton>
+                            </form>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+                {lots.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={canManageStock ? 7 : 6}
+                      className="px-2 py-6 text-center text-muted-foreground"
+                    >
+                      No consignment stock recorded for this product yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

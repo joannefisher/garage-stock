@@ -2,6 +2,7 @@ import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ClickableRow } from "@/components/stock/clickable-row"
 import { StockFilters } from "@/components/stock/stock-filters"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
@@ -183,6 +184,11 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
               <Button asChild variant="outline" size="lg">
                 <Link href="/dashboard/stock/receive">Receive stock</Link>
               </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/dashboard/stock/consignment/pending-payments">
+                  Pending payments
+                </Link>
+              </Button>
               <Button asChild size="lg">
                 <Link href="/dashboard/stock/new">
                   <svg
@@ -257,14 +263,16 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                 <>
                   <th className="px-4 py-3.5 text-right font-bold">Cost</th>
                   <th className="px-4 py-3.5 text-right font-bold">Sell</th>
+                  <th className="px-4 py-3.5 font-bold">Actions</th>
                 </>
               )}
             </tr>
           </thead>
           <tbody>
             {items.map((item, i) => (
-              <tr
+              <ClickableRow
                 key={item.id}
+                href={`/dashboard/stock/${item.id}`}
                 className={`border-b last:border-0 hover:bg-accent/50 ${
                   i % 2 === 1 ? "bg-muted/40" : ""
                 }`}
@@ -323,14 +331,26 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
                     <td className="px-4 py-3.5 text-right font-semibold">
                       £{item.selling_price.toFixed(2)}
                     </td>
+                    <td className="px-4 py-3.5">
+                      {item.is_consignment && (
+                        <Link
+                          href={`/dashboard/stock/consignment/receive?id=${encodeURIComponent(
+                            item.id_number
+                          )}`}
+                          className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
+                        >
+                          Add consignment stock
+                        </Link>
+                      )}
+                    </td>
                   </>
                 )}
-              </tr>
+              </ClickableRow>
             ))}
             {items.length === 0 && !error && (
               <tr>
                 <td
-                  colSpan={canManageStock ? 8 : 6}
+                  colSpan={canManageStock ? 9 : 6}
                   className="px-4 py-8 text-center text-muted-foreground"
                 >
                   No stock items match your search.

@@ -1,5 +1,5 @@
 /**
- * Hand-written types matching supabase/migrations/0001-0009.
+ * Hand-written types matching supabase/migrations/0001-0013.
  *
  * Once your Supabase project is linked, regenerate the real (guaranteed
  * accurate) types and replace this file entirely:
@@ -41,6 +41,7 @@ export type PurchaseOrderStatus =
 export type SupplierReturnStatus = "draft" | "sent" | "credited"
 export type StockTakeStatus = "in_progress" | "completed" | "cancelled"
 export type JobStatus = "open" | "closed"
+export type ConsignmentLotStatus = "on_consignment" | "committed" | "returned"
 
 // ---------------------------------------------------------------------
 // profiles (0001_init.sql)
@@ -215,6 +216,11 @@ export type StockMovementRow = {
   // the stock take that produced it, same idea as purchase_order_id /
   // supplier_return_id above.
   stock_take_id: string | null
+  // Set on the 'goods_in' movement that receives a consignment lot, and
+  // on the 'return_to_supplier' movement that sends one back unused
+  // (0011_consignment_stock_lots.sql) — same "trace back to origin"
+  // idea as job_id/purchase_order_id/stock_take_id above.
+  consignment_lot_id: string | null
   performed_by: string | null
   notes: string | null
   created_at: string
@@ -229,12 +235,68 @@ export type StockMovementInsert = {
   purchase_order_id?: string | null
   supplier_return_id?: string | null
   stock_take_id?: string | null
+  consignment_lot_id?: string | null
   performed_by?: string | null
   notes?: string | null
   created_at?: string
 }
 // No update type exported: the ledger is append-only (see RLS policy in
 // 0002_domain_schema.sql) — there is intentionally no UPDATE policy.
+
+// ---------------------------------------------------------------------
+// consignment_stock_lots (0011_consignment_stock_lots.sql)
+// ---------------------------------------------------------------------
+// Consignment-only lot tracking — owned stock keeps using stock_items.
+// quantity_on_hand/cost_price exactly as before. See that migration's
+// header comment for the full design (why lot-tracking is scoped to
+// consignment, what "committed" means, why payment_due_date is stored
+// rather than computed). paid_at/paid_by added in 0012_consignment_lot_
+// payment.sql — a "pending payments" report needs a way for something
+// to leave "pending" once it's actually been paid.
+
+export type ConsignmentStockLotRow = {
+  id: string
+  stock_item_id: string
+  quantity: number
+  cost_price: number
+  received_at: string
+  received_by: string | null
+  due_back_at: string
+  status: ConsignmentLotStatus
+  committed_at: string | null
+  committed_by: string | null
+  payment_due_date: string | null
+  paid_at: string | null
+  paid_by: string | null
+  returned_at: string | null
+  returned_by: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+export type ConsignmentStockLotInsert = {
+  id?: string
+  stock_item_id: string
+  quantity: number
+  cost_price?: number
+  received_at?: string
+  received_by?: string | null
+  due_back_at: string
+  status?: ConsignmentLotStatus
+  committed_at?: string | null
+  committed_by?: string | null
+  payment_due_date?: string | null
+  paid_at?: string | null
+  paid_by?: string | null
+  returned_at?: string | null
+  returned_by?: string | null
+  notes?: string | null
+  created_by?: string | null
+  created_at?: string
+  updated_at?: string
+}
+export type ConsignmentStockLotUpdate = Partial<ConsignmentStockLotInsert>
 
 // ---------------------------------------------------------------------
 // purchase_orders / purchase_order_lines
@@ -553,6 +615,25 @@ export type SupplierReturnCreditsWeeklyRow = {
   total_credit: number
 }
 
+// v_consignment_pending_payments (0013_consignment_pending_payments_view.sql)
+// — committed-but-unpaid consignment lots only; see that migration for why
+// on_consignment and paid lots are excluded.
+export type ConsignmentPendingPaymentRow = {
+  lot_id: string
+  stock_item_id: string
+  id_number: string
+  name: string
+  supplier_id: string | null
+  supplier_name: string | null
+  quantity: number
+  cost_price: number
+  amount_due: number
+  received_at: string
+  committed_at: string | null
+  payment_due_date: string | null
+  is_overdue: boolean
+}
+
 // ---------------------------------------------------------------------
 // Database (Supabase client generic parameter)
 // ---------------------------------------------------------------------
@@ -604,6 +685,12 @@ export type Database = {
         // in 0002_domain_schema.sql) — `never` makes `.update()` a
         // compile-time error here as a reminder, not just a runtime one.
         Update: never
+        Relationships: []
+      }
+      consignment_stock_lots: {
+        Row: ConsignmentStockLotRow
+        Insert: ConsignmentStockLotInsert
+        Update: ConsignmentStockLotUpdate
         Relationships: []
       }
       purchase_orders: {
@@ -680,6 +767,10 @@ export type Database = {
         Row: SupplierReturnCreditsWeeklyRow
         Relationships: []
       }
+      v_consignment_pending_payments: {
+        Row: ConsignmentPendingPaymentRow
+        Relationships: []
+      }
     }
     Functions: Record<string, never>
     Enums: {
@@ -692,6 +783,7 @@ export type Database = {
       supplier_return_status: SupplierReturnStatus
       stock_take_status: StockTakeStatus
       job_status: JobStatus
+      consignment_lot_status: ConsignmentLotStatus
     }
   }
 }
