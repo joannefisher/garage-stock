@@ -24,11 +24,22 @@ function str(formData: FormData, key: string): string {
  * (0002_domain_schema.sql) for the cost_price update; this check just
  * gives a plain error instead of a raw RLS failure. Not the security
  * boundary — see the comment on getCurrentStaff().
+ *
+ * This is also step 2a of the new two-step "Receive Stock" journey
+ * (Sept 2026, see /dashboard/stock/receive-stock) — that screen's "add
+ * stock to this existing product" link lands here unchanged. The one
+ * addition for that: when quantity > 0, also record a stock_lots row
+ * (status 'owned', 0018_stock_lots_and_status.sql) alongside the
+ * existing goods_in movement, purely additive — nothing about the
+ * existing plain Receive Stock screen changes, this just gives the new
+ * Return Stock search something to find. Not done when quantity is 0
+ * (a cost-only update isn't "stock received").
  */
 export async function receiveStock(formData: FormData) {
   const idOrBarcode = str(formData, "id_or_barcode")
   const quantityStr = str(formData, "quantity")
   const costPriceStr = str(formData, "cost_price")
+  const priceIncVatStr = str(formData, "price_inc_vat")
 
   function fail(message: string): never {
     redirect(
@@ -40,6 +51,7 @@ export async function receiveStock(formData: FormData) {
 
   const quantity = quantityStr === "" ? 0 : Number(quantityStr)
   const costPrice = costPriceStr === "" ? null : Number(costPriceStr)
+  const priceIncVat = priceIncVatStr === "" ? null : Number(priceIncVatStr)
 
   if (!idOrBarcode) fail("Scan or enter an ID/barcode.")
   if (!Number.isFinite(quantity) || quantity < 0) {
@@ -47,6 +59,9 @@ export async function receiveStock(formData: FormData) {
   }
   if (costPrice !== null && (!Number.isFinite(costPrice) || costPrice < 0)) {
     fail("Cost price must be 0 or more.")
+  }
+  if (priceIncVat !== null && (!Number.isFinite(priceIncVat) || priceIncVat < 0)) {
+    fail("Price inc. VAT must be 0 or more.")
   }
   if (quantity === 0 && costPrice === null) {
     fail("Enter a quantity received, a new cost price, or both.")
@@ -69,33 +84,57 @@ export async function receiveStock(formData: FormData) {
     fail(`No product found for "${idOrBarcode}". Set it up first under "Add product".`)
   }
 
-  // The movement insert (bumps quantity_on_hand via the on_stock_movement_
-  // insert trigger) and the cost_price update are independent writes to
-  // different tables/columns on the same item — safe to fire concurrently
-  // rather than one at a time. See CLAUDE.md's perf note.
-  const [movementResult, priceResult] = await Promise.all([
-    quantity > 0
-      ? supabase.from("stock_movements").insert({
-          stock_item_id: stockItem.id,
-          movement_type: "goods_in",
-          quantity,
-          performed_by: staff.id,
-          notes:
-            costPrice !== null
-              ? `Received — cost price updated to £${costPrice.toFixed(2)}`
-              : "Received",
-        })
-      : Promise.resolve({ error: null }),
+  // The cost_price update is independent of everything below — fire it
+  // concurrently rather than sequentially. See CLAUDE.md's perf note.
+  //
+  // The lot + movement insert can't run in the same wave: the movement
+  // needs the new lot's id (stock_lot_id, 0018_stock_lots_and_status.sql)
+  // to trace back to it, same as consignment_lot_id/black_circle_lot_id
+  // already do for their own lot tables. Only created when quantity > 0 —
+  // a cost-only update isn't "stock received", so nothing new comes into
+  // the new Return Stock search for it.
+  const [priceResult, lotAndMovementResult] = await Promise.all([
     costPrice !== null
       ? supabase.from("stock_items").update({ cost_price: costPrice }).eq("id", stockItem.id)
       : Promise.resolve({ error: null }),
+    (async (): Promise<{ error: { message: string; code?: string } | null }> => {
+      if (quantity <= 0) return { error: null }
+
+      const { data: lot, error: lotError } = await supabase
+        .from("stock_lots")
+        .insert({
+          stock_item_id: stockItem.id,
+          quantity,
+          cost_price: costPrice ?? stockItem.cost_price,
+          price_inc_vat: priceIncVat,
+          status: "owned",
+          received_by: staff.id,
+          created_by: staff.id,
+        })
+        .select("id")
+        .single()
+
+      if (lotError || !lot) return { error: lotError }
+
+      return supabase.from("stock_movements").insert({
+        stock_item_id: stockItem.id,
+        movement_type: "goods_in",
+        quantity,
+        stock_lot_id: lot.id,
+        performed_by: staff.id,
+        notes:
+          costPrice !== null
+            ? `Received — cost price updated to £${costPrice.toFixed(2)}`
+            : "Received",
+      })
+    })(),
   ])
 
-  if (movementResult.error) {
-    fail(friendlyDbError(movementResult.error, "Could not record the stock received."))
-  }
   if (priceResult.error) {
     fail(friendlyDbError(priceResult.error, "Could not update the cost price."))
+  }
+  if (lotAndMovementResult.error) {
+    fail(friendlyDbError(lotAndMovementResult.error, "Could not record the stock received."))
   }
 
   // Redirect with a confirmation rather than back to a same-looking blank

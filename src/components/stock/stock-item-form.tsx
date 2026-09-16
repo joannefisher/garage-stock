@@ -19,10 +19,18 @@ export function StockItemForm({
   suppliers,
   action,
   error,
+  defaultIdNumber,
 }: {
   suppliers: SupplierOption[]
   action: (formData: FormData) => void
   error?: string
+  /**
+   * Prefills the ID/barcode field — used when this form is reached from
+   * step 2b of the new Receive Stock lookup (/dashboard/stock/receive-
+   * stock), which already knows the scanned code didn't match anything
+   * on file. Still editable — just saves retyping it.
+   */
+  defaultIdNumber?: string
 }) {
   const [itemType, setItemType] = useState<"part" | "tyre">("part")
   // Black Circle tyres are never owned or charged for (0016_black_circle_
@@ -70,7 +78,7 @@ export function StockItemForm({
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="id_number">ID / barcode *</Label>
-          <ScannableIdInput id="id_number" name="id_number" required />
+          <ScannableIdInput id="id_number" name="id_number" defaultValue={defaultIdNumber} required />
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
           <Label htmlFor="name">Name *</Label>
@@ -91,8 +99,19 @@ export function StockItemForm({
         {!isBlackCircle && (
           <>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cost_price">Cost price (£)</Label>
+              <Label htmlFor="cost_price">Cost price exc. VAT (£)</Label>
               <Input id="cost_price" name="cost_price" type="number" step="0.01" min="0" defaultValue="0" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="price_inc_vat">Cost price inc. VAT (£, optional)</Label>
+              <Input
+                id="price_inc_vat"
+                name="price_inc_vat"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Only needed if you track it"
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="selling_price">Selling price (£)</Label>

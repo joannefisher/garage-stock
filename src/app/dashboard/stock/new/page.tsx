@@ -10,6 +10,10 @@ import { createStockItem } from "./actions"
 export default async function NewStockItemPage(props: PageProps<"/dashboard/stock/new">) {
   const searchParams = await props.searchParams
   const error = typeof searchParams.error === "string" ? searchParams.error : undefined
+  // Prefilled when arriving from step 2b of the new Receive Stock lookup
+  // (/dashboard/stock/receive-stock) — a scanned code that didn't match
+  // an existing product lands here with it pre-typed.
+  const idNumber = typeof searchParams.id_number === "string" ? searchParams.id_number : undefined
 
   const staff = await getCurrentStaff()
   if (!staff?.canManageStock) {
@@ -46,7 +50,12 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
           <CardTitle>New product</CardTitle>
         </CardHeader>
         <CardContent>
-          <StockItemForm suppliers={suppliers ?? []} action={createStockItem} error={error} />
+          <StockItemForm
+            suppliers={suppliers ?? []}
+            action={createStockItem}
+            error={error}
+            defaultIdNumber={idNumber}
+          />
         </CardContent>
       </Card>
     </div>

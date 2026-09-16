@@ -47,6 +47,12 @@ export type JobStatus = "open" | "closed"
 export type ConsignmentLotStatus = "on_consignment" | "committed" | "returned"
 // 0016_black_circle_stock.sql
 export type BlackCircleLotStatus = "in_stock" | "used" | "returned"
+// 0018_stock_lots_and_status.sql — the new generic Ordered/Owned/On
+// Account/Returned status, tracked per received batch (see that
+// migration's header for the full design). Distinct from
+// ConsignmentLotStatus/BlackCircleLotStatus above, which keep their own
+// separate lifecycles untouched.
+export type StockLotStatus = "ordered" | "owned" | "on_account" | "returned"
 
 // ---------------------------------------------------------------------
 // profiles (0001_init.sql)
@@ -241,6 +247,11 @@ export type StockMovementRow = {
   // stock (0016_black_circle_stock.sql) — same "trace back to origin"
   // idea as consignment_lot_id above.
   black_circle_lot_id: string | null
+  // Set on the 'goods_in' movement created by the new Receive Stock /
+  // Add Product flows for a stock_lots row with status 'owned'
+  // (0018_stock_lots_and_status.sql) — an 'ordered' lot never gets a
+  // movement, so this stays null until the lot is actually received.
+  stock_lot_id: string | null
   performed_by: string | null
   notes: string | null
   created_at: string
@@ -257,6 +268,7 @@ export type StockMovementInsert = {
   stock_take_id?: string | null
   consignment_lot_id?: string | null
   black_circle_lot_id?: string | null
+  stock_lot_id?: string | null
   performed_by?: string | null
   notes?: string | null
   created_at?: string
@@ -373,6 +385,47 @@ export type BlackCircleStockLotInsert = {
   updated_at?: string
 }
 export type BlackCircleStockLotUpdate = Partial<BlackCircleStockLotInsert>
+
+// ---------------------------------------------------------------------
+// stock_lots (0018_stock_lots_and_status.sql)
+// ---------------------------------------------------------------------
+// The new generic Ordered/Owned/On Account/Returned batch tracking used
+// by the redesigned Stock hub (Add Order, Receive Stock, Return Stock) —
+// see that migration's header for the full design. consignment_stock_lots
+// and black_circle_stock_lots keep their own separate lifecycle and
+// screens, untouched by this table.
+
+export type StockLotRow = {
+  id: string
+  stock_item_id: string
+  quantity: number
+  cost_price: number
+  price_inc_vat: number | null
+  status: StockLotStatus
+  ordered_at: string | null
+  received_at: string
+  received_by: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+export type StockLotInsert = {
+  id?: string
+  stock_item_id: string
+  quantity: number
+  cost_price?: number
+  price_inc_vat?: number | null
+  status?: StockLotStatus
+  ordered_at?: string | null
+  received_at?: string
+  received_by?: string | null
+  notes?: string | null
+  created_by?: string | null
+  created_at?: string
+  updated_at?: string
+}
+export type StockLotUpdate = Partial<StockLotInsert>
 
 // ---------------------------------------------------------------------
 // purchase_orders / purchase_order_lines
@@ -781,6 +834,12 @@ export type Database = {
         Update: BlackCircleStockLotUpdate
         Relationships: []
       }
+      stock_lots: {
+        Row: StockLotRow
+        Insert: StockLotInsert
+        Update: StockLotUpdate
+        Relationships: []
+      }
       purchase_orders: {
         Row: PurchaseOrderRow
         Insert: PurchaseOrderInsert
@@ -874,6 +933,7 @@ export type Database = {
       job_status: JobStatus
       consignment_lot_status: ConsignmentLotStatus
       black_circle_lot_status: BlackCircleLotStatus
+      stock_lot_status: StockLotStatus
     }
   }
 }

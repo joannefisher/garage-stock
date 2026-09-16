@@ -184,11 +184,91 @@ garage (parts and tyres). Single tenant, staff-only, no public sign-up.
 - Stock list/detail queries filter on stock catalogue size assumptions:
   type-specific search filters (vehicle make/model, tyre size/season/
   tier/commercial) are applied in-memory in `src/app/dashboard/stock/
-  page.tsx` after a base Supabase fetch, rather than via PostgREST
-  embedded-resource `!inner` filtering — deliberate, because there's no
-  live Supabase project here to verify that query syntax against. Fine
-  for a single garage's catalogue size; revisit if it ever gets large.
+  search/page.tsx` (moved here from the old `/dashboard/stock` page,
+  Sept 2026 — see the stock status bullet below) after a base Supabase
+  fetch, rather than via PostgREST embedded-resource `!inner` filtering —
+  deliberate, because there's no live Supabase project here to verify
+  that query syntax against. Fine for a single garage's catalogue size;
+  revisit if it ever gets large.
 - shadcn/ui components were added by hand (network to ui.shadcn.com may be
   blocked in some sandboxes); `components.json` is configured so
   `npx shadcn add <component>` still works from an environment with
   network access.
+- **Stock status redesign (Sept 2026), in progress — the Stock page is a
+  hub now, and a new Ordered/Owned/On Account/Returned status exists
+  alongside (not instead of) the existing On Account/Black Circle
+  mechanisms.** Joanne's request explicitly deferred the full detail of
+  how a stock item's status changes through the receive flow, and how
+  job usage should turn it into a "sold product" — this round only
+  builds the UI shell and lot-tracking groundwork her numbered journey
+  asked for, per "do not remove any functionality yet". What changed:
+  - `/dashboard/stock` is now a hub: colour tiles (unchanged) + six
+    action buttons (Stock Search, Add Order, Receive Stock, Return
+    Stock, Black Circles Stock, Reporting), plus a low-emphasis "More"
+    row at the bottom linking to Add product / plain Receive stock /
+    Receive on-account stock — nothing deleted, just relocated per her
+    instruction. The search+list UI that used to live here moved,
+    unchanged in substance, to `/dashboard/stock/search`, now rendered
+    by a client component (`stock-search-table.tsx`) so every column
+    header is click-to-sort (numeric-aware) with a scrollable (sticky
+    header, capped-height) body — same JobsTable/CountedTable pattern
+    used elsewhere. Reorder report and Pending payments got a new front
+    door, `/dashboard/stock/reporting` — same reports, same code, just
+    linked from there now instead of the hub directly.
+  - New table `stock_lots` (0018_stock_lots_and_status.sql) tracks
+    status **per received batch**, not one status per product — a
+    product can have some units Owned and some still Ordered at once.
+    This is deliberately separate from `consignment_stock_lots` and
+    `black_circle_stock_lots`, which keep their own lifecycle/screens
+    entirely untouched ("as now for this run" — her words, re: Black
+    Circles). Confirmed with Joanne before building (see the four
+    clarifying questions/answers in that session): status is per-lot;
+    an 'ordered' lot (via the new Add Order screen) does NOT affect
+    `quantity_on_hand` — only an 'owned' lot does, via the same
+    `stock_movements`/`apply_stock_movement` trigger every other receipt
+    already uses; existing stock defaults to "Owned" (on-account items
+    stay governed by `is_consignment`/`consignment_stock_lots` as
+    before, nothing backfilled onto the new table); and — the one place
+    this diverges from every other lot table in the app — returning a
+    stock_lots row **deletes it outright** rather than marking it
+    'returned' and keeping it, Joanne's explicit choice when asked. The
+    stock_movements ledger (append-only, never deleted) still keeps the
+    return_to_supplier record, so the return itself isn't lost from
+    history, only the lot's own batch detail (cost price, receipt date).
+  - New Receive Stock journey (`/dashboard/stock/receive-stock`):
+    barcode-first lookup (ilike search, since `id_number` is unique so
+    an exact scan can only ever match one row — "multiple, e.g. from
+    different suppliers" can only come from a broader/typed search) that
+    branches to either the existing plain Receive Stock screen (now
+    also writes a `stock_lots` row alongside its `goods_in` movement,
+    purely additive) or the existing Add Product screen (now accepts a
+    prefilled ID number and, for a nonzero starting quantity, writes the
+    same kind of lot). Add Order (`/dashboard/stock/add-order`) mirrors
+    plain Receive Stock's form but only ever writes a `stock_lots` row
+    with status 'ordered' and no movement. Return Stock
+    (`/dashboard/stock/return-stock`) searches by barcode and surfaces
+    BOTH new-mechanism 'owned' lots and legacy on-account
+    (`consignment_stock_lots`, status committed+unpaid) stock as
+    returnable, reusing the existing `returnConsignmentLot` action
+    unchanged for the latter rather than duplicating its logic — Black
+    Circle stock is excluded entirely (its own return flow, untouched).
+  - **Deliberately NOT built this round** (flagged to Joanne, not an
+    oversight): nothing reconciles an 'ordered' lot into an 'owned' one
+    when it's actually received — Receive Stock always creates a fresh
+    'owned' lot regardless of any pending order for the same product.
+    `recordUsage` (`src/app/dashboard/stock/[id]/actions.ts`) is
+    untouched — a mechanic/admin adding stock to a job still just writes
+    a plain 'used' movement against `quantity_on_hand`, with no concept
+    of "sold product" or which lot a unit came from. Both are exactly
+    the receive-flow/job-usage status-transition rules Joanne said
+    she'd describe in a follow-up ("to keep things simple here") —
+    building them now would mean guessing FIFO-vs-newest-first
+    allocation and other rules nothing in scope specified.
+  - Verified with `next typegen && tsc --noEmit`, `eslint .`, a full
+    `next build`, `mcp__Supabase__get_advisors` (no new findings — RLS
+    confirmed enabled with the same staff-read/admin-write shape as
+    every other lot table), and a from-scratch mocked-Supabase Playwright
+    click-test (17/17 passing) covering the full Add Order → Receive
+    Stock → Return Stock → Stock Search sort loop end to end, including
+    that `quantity_on_hand` only moves for 'owned' lots and not 'ordered'
+    ones.

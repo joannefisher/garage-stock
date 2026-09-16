@@ -10,10 +10,11 @@ import { SubmitButton } from "@/components/ui/submit-button"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockItemWithDetails } from "@/lib/stock/types"
-import type { ConsignmentStockLotRow, StockMovementRow } from "@/types/database.types"
+import type { ConsignmentStockLotRow, StockLotRow, StockMovementRow } from "@/types/database.types"
 
 import { markConsignmentLotPaid, returnConsignmentLot } from "../on-account/actions"
 import { returnBlackCircleLot, useBlackCircleLot } from "../black-circle/actions"
+import { returnStockLot } from "../return-stock/actions"
 import { recordAdjustment, recordUsage } from "./actions"
 
 // Supabase client typing degrades an embedded-resource select
@@ -58,6 +59,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
     { data: movements },
     { data: consignmentLots },
     { data: blackCircleLots },
+    { data: newStockLots },
     { data: openJobs },
   ] = await Promise.all([
     getCurrentStaff(),
@@ -82,6 +84,14 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
       .select("id, quantity, received_at, status, used_at, returned_at, jobs(id, job_number)")
       .eq("stock_item_id", id)
       .order("received_at", { ascending: false }),
+    // The new Ordered/Owned status lots (0018_stock_lots_and_status.sql,
+    // Sept 2026 stock status redesign) — separate from consignment/Black
+    // Circle lots above, which keep their own unrelated tables.
+    supabase
+      .from("stock_lots")
+      .select("*")
+      .eq("stock_item_id", id)
+      .order("received_at", { ascending: false }),
     supabase
       .from("jobs")
       .select("id, job_number, vehicle_registration")
@@ -94,6 +104,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
   const stockItem = item as unknown as StockItemWithDetails
   const lots = (consignmentLots ?? []) as ConsignmentStockLotRow[]
   const bcLots = (blackCircleLots ?? []) as unknown as BlackCircleLotWithJob[]
+  const stockLots = (newStockLots ?? []) as StockLotRow[]
   // "On account" badge reflects money currently owed, not the catalogue
   // is_consignment flag (Sept 2026: "Stock should be marked as 'On
   // Account' if it has not been paid for") — a lot only ever reaches
@@ -133,7 +144,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
       )}
       {returnedLot && (
         <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
-          ✓ On-account item returned to supplier.
+          ✓ Stock returned to supplier.
         </p>
       )}
       {paid && (
@@ -515,6 +526,85 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                     </td>
                   </tr>
                 )}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {stockLots.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle>Stock lots</CardTitle>
+            {canManageStock && (
+              <div className="flex gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/dashboard/stock/add-order?value=${encodeURIComponent(stockItem.id_number)}`}>
+                    Add order
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/dashboard/stock/receive?id=${encodeURIComponent(stockItem.id_number)}`}>
+                    Receive stock
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <p className="mb-3 text-sm text-muted-foreground">
+              Ordered/Owned batches from the new Add Order / Receive Stock flow (Sept 2026) — a
+              plain quantity received before this existed won&apos;t show up here, only in
+              &quot;Recent movements&quot; below.
+            </p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="px-2 py-1.5 font-medium">Status</th>
+                  <th className="px-2 py-1.5 font-medium">Date</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Qty</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Cost exc. VAT</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Cost inc. VAT</th>
+                  {canManageStock && <th className="px-2 py-1.5 font-medium">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {stockLots.map((lot) => (
+                  <tr key={lot.id} className="border-b last:border-0">
+                    <td className="px-2 py-1.5">
+                      <Badge variant="outline" className="normal-case">
+                        {lot.status.replace("_", " ")}
+                      </Badge>
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {new Date(lot.status === "ordered" ? lot.ordered_at ?? lot.created_at : lot.received_at).toLocaleDateString(
+                        "en-GB"
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">{lot.quantity}</td>
+                    <td className="px-2 py-1.5 text-right">£{lot.cost_price.toFixed(2)}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      {lot.price_inc_vat != null ? `£${lot.price_inc_vat.toFixed(2)}` : "—"}
+                    </td>
+                    {canManageStock && (
+                      <td className="px-2 py-1.5">
+                        {lot.status === "owned" && (
+                          <form action={returnStockLot}>
+                            <input type="hidden" name="lot_id" value={lot.id} />
+                            <input
+                              type="hidden"
+                              name="redirect_to"
+                              value={`/dashboard/stock/${stockItem.id}`}
+                            />
+                            <SubmitButton size="sm" variant="outline" pendingText="Returning…">
+                              Return to supplier
+                            </SubmitButton>
+                          </form>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </CardContent>

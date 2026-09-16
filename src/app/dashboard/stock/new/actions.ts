@@ -52,6 +52,9 @@ export async function createStockItem(formData: FormData) {
   // not just hidden client-side (stock-item-form.tsx), since a hidden
   // field is still user-controllable input.
   const isBlackCircle = formData.get("is_black_circle") === "on"
+  const costPrice = isBlackCircle ? 0 : num(formData, "cost_price")
+  const priceIncVatStr = str(formData, "price_inc_vat")
+  const priceIncVat = isBlackCircle || priceIncVatStr === "" ? null : Number(priceIncVatStr)
 
   const { data: stockItem, error: insertError } = await supabase
     .from("stock_items")
@@ -60,7 +63,7 @@ export async function createStockItem(formData: FormData) {
       id_number: str(formData, "id_number"),
       name: str(formData, "name"),
       supplier_id: optionalStr(formData, "supplier_id"),
-      cost_price: isBlackCircle ? 0 : num(formData, "cost_price"),
+      cost_price: costPrice,
       selling_price: isBlackCircle ? 0 : num(formData, "selling_price"),
       is_non_returnable: formData.get("is_non_returnable") === "on",
       is_consignment: formData.get("is_consignment") === "on",
@@ -82,13 +85,21 @@ export async function createStockItem(formData: FormData) {
   }
 
   // The type-details insert (part_details/tyre_details) and the opening-
-  // balance movement are both independent follow-ups to the stock_items
-  // insert above — neither depends on the other, only on stockItem.id —
-  // so they run as one parallel wave instead of two sequential round
-  // trips. Each request to this project currently costs ~100-250ms (see
-  // CLAUDE.md's "creating records is slow" note), so every avoidable
-  // sequential hop is worth cutting.
-  const [detailsResult, movementResult] = await Promise.all([
+  // balance lot+movement are both independent follow-ups to the
+  // stock_items insert above — neither depends on the other, only on
+  // stockItem.id — so they run as one parallel wave instead of two
+  // sequential round trips. Each request to this project currently costs
+  // ~100-250ms (see CLAUDE.md's "creating records is slow" note), so
+  // every avoidable sequential hop is worth cutting.
+  //
+  // The opening-balance movement now also gets a stock_lots row (status
+  // 'owned', 0018_stock_lots_and_status.sql) when there's a starting
+  // quantity, same as the plain Receive Stock action — this is step 2b
+  // of the new Receive Stock journey ("create a new parent product AND
+  // add stock to that in the same screen") reusing this exact form/
+  // action unchanged; Black Circle stock never gets a lot here (never
+  // owned — 0016), same as it's never charged for.
+  const [detailsResult, lotAndMovementResult] = await Promise.all([
     itemType === "part"
       ? supabase.from("part_details").insert({
           stock_item_id: stockItem.id,
@@ -110,15 +121,45 @@ export async function createStockItem(formData: FormData) {
           brand: optionalStr(formData, "brand"),
           pattern: optionalStr(formData, "pattern"),
         }),
-    initialQuantity !== 0
-      ? supabase.from("stock_movements").insert({
+    (async (): Promise<{ error: { message: string; code?: string } | null }> => {
+      if (initialQuantity === 0) return { error: null }
+
+      if (isBlackCircle) {
+        return supabase.from("stock_movements").insert({
           stock_item_id: stockItem.id,
           movement_type: "initial",
           quantity: initialQuantity,
           performed_by: staff.id,
           notes: "Opening balance",
         })
-      : Promise.resolve({ error: null }),
+      }
+
+      const { data: lot, error: lotError } = await supabase
+        .from("stock_lots")
+        .insert({
+          stock_item_id: stockItem.id,
+          quantity: Math.abs(initialQuantity),
+          cost_price: costPrice,
+          price_inc_vat: priceIncVat,
+          status: "owned",
+          received_by: staff.id,
+          created_by: staff.id,
+          notes: "Opening balance",
+        })
+        .select("id")
+        .single()
+
+      if (lotError || !lot) return { error: lotError }
+
+      return supabase.from("stock_movements").insert({
+        stock_item_id: stockItem.id,
+        movement_type: "initial",
+        quantity: initialQuantity,
+        stock_lot_id: lot.id,
+        performed_by: staff.id,
+        notes: "Opening balance",
+      })
+    })(),
   ])
 
   if (detailsResult.error) {
@@ -128,10 +169,10 @@ export async function createStockItem(formData: FormData) {
       )}`
     )
   }
-  if (movementResult.error) {
+  if (lotAndMovementResult.error) {
     redirect(
       `/dashboard/stock/${stockItem.id}?error=${encodeURIComponent(
-        friendlyDbError(movementResult.error)
+        friendlyDbError(lotAndMovementResult.error)
       )}`
     )
   }

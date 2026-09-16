@@ -1,84 +1,136 @@
 import Link from "next/link"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ClickableRow } from "@/components/stock/clickable-row"
-import { StockFilters } from "@/components/stock/stock-filters"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
-import type { StockItemWithDetails, StockSearchParams } from "@/lib/stock/types"
 
-function matchesTypeFilters(item: StockItemWithDetails, params: StockSearchParams) {
-  if (item.item_type === "part" && item.part_details) {
-    if (
-      params.vehicle_make &&
-      !item.part_details.vehicle_make
-        ?.toLowerCase()
-        .includes(params.vehicle_make.toLowerCase())
-    ) {
-      return false
-    }
-    if (
-      params.vehicle_model &&
-      !item.part_details.vehicle_model
-        ?.toLowerCase()
-        .includes(params.vehicle_model.toLowerCase())
-    ) {
-      return false
-    }
-  }
+// Sept 2026 stock status redesign — the Stock page is now a hub rather
+// than the search-and-list page it used to be: colour tiles (unchanged,
+// Joanne intends to add more metrics here later) plus six action
+// entries — Stock Search, Add Order, Receive Stock, Return Stock, Black
+// Circles Stock, Reporting — replacing the old flat row of buttons. Per
+// her explicit instruction ("do not remove any functionality yet but
+// hide this from the UI or put at the bottom of the screen for now"):
+//   - The search feature + full stock list that used to live here moved
+//     to /dashboard/stock/search unchanged, just relocated (item 3).
+//   - Reorder report and Pending payments moved under the new
+//     /dashboard/stock/reporting hub (item 8) — same reports, same code,
+//     new front door.
+//   - Add product, plain Receive stock, and Receive on-account stock
+//     still work exactly as before (nothing deleted) and are still
+//     directly reachable — see the "More" section at the bottom — since
+//     they're also reused internally by the new Receive Stock lookup
+//     flow (../receive-stock).
+export default async function StockPage(props: PageProps<"/dashboard/stock">) {
+  const searchParams = (await props.searchParams) as { error?: string }
 
-  if (item.item_type === "tyre" && item.tyre_details) {
-    const td = item.tyre_details
-    if (params.tyre_width && td.width !== Number(params.tyre_width)) return false
-    if (params.tyre_profile && td.profile !== Number(params.tyre_profile)) return false
-    if (
-      params.tyre_rim_diameter &&
-      td.rim_diameter !== Number(params.tyre_rim_diameter)
-    ) {
-      return false
-    }
-    if (params.tyre_season && td.season !== params.tyre_season) return false
-    if (params.tyre_tier && td.tier !== params.tyre_tier) return false
-    // "All" (no value) means no filter — see the Load Rated select in
-    // stock-filters.tsx.
-    if (params.tyre_load_rating && td.load_rating !== params.tyre_load_rating) return false
-  }
+  // A lighter query than before: this page only needs aggregate counts
+  // for the tiles now, not full item/supplier/type-detail rows (that
+  // detail lives on /dashboard/stock/search, which still fetches it).
+  const supabase = await createClient()
+  const [staff, { data: stockRows, error }, { count: stockTakesThisMonth }] = await Promise.all([
+    getCurrentStaff(),
+    supabase
+      .from("stock_items")
+      .select("id, quantity_on_hand, ideal_stock_level, cost_price, supplier_id")
+      .eq("is_active", true),
+    supabase
+      .from("stock_takes")
+      .select("id", { count: "exact", head: true })
+      .gte("started_at", new Date(new Date().setDate(1)).toISOString()),
+  ])
+  const canManageStock = staff?.canManageStock ?? false
 
-  return true
-}
+  const items = stockRows ?? []
+  const totalItems = items.length
+  const lowStockCount = items.filter((item) => item.quantity_on_hand < item.ideal_stock_level).length
+  const stockValue = items.reduce((sum, item) => sum + item.quantity_on_hand * item.cost_price, 0)
+  const supplierCount = new Set(items.map((item) => item.supplier_id).filter(Boolean)).size
 
-// Stock status and consignment are generic, cross-type filters — unlike
-// the vehicle/tyre filters above, they don't depend on item_type — so
-// they're applied as a separate pass rather than folded into
-// matchesTypeFilters. Same reason as the type filters: no live project
-// here to verify comparing two columns (quantity_on_hand vs
-// ideal_stock_level) via PostgREST syntax, and it's cheap in-memory work
-// at this catalogue's scale regardless.
-//
-// "On account only" now means "currently owes payment" (owesPaymentIds),
-// not the static is_consignment catalogue flag — kept consistent with
-// the "on account" badge below, which changed for the same reason (Sept
-// 2026: "Stock should be marked as 'On Account' if it has not been paid
-// for"). A product can still be an on-account *type* of product between
-// lots (nothing currently owed) — this filter is about money owed right
-// now, same as the badge.
-function matchesStockStatus(
-  item: StockItemWithDetails,
-  params: StockSearchParams,
-  owesPaymentIds: Set<string>
-) {
-  if (params.consignment_only === "true" && !owesPaymentIds.has(item.id)) return false
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1.5">
+        <h1 className="font-heading text-3xl font-bold tracking-tight sm:text-[38px]">Stock</h1>
+        <p className="text-[15px] font-medium text-muted-foreground">
+          {totalItems} parts and tyres on file
+          {supplierCount > 0 ? ` across ${supplierCount} supplier${supplierCount === 1 ? "" : "s"}` : ""}
+        </p>
+      </div>
 
-  if (params.stock_status === "out" && item.quantity_on_hand > 0) return false
-  if (params.stock_status === "low" && item.quantity_on_hand >= item.ideal_stock_level) {
-    return false
-  }
-  if (params.stock_status === "ok" && item.quantity_on_hand < item.ideal_stock_level) {
-    return false
-  }
+      {searchParams.error && (
+        <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          {searchParams.error}
+        </p>
+      )}
 
-  return true
+      {error && (
+        <p className="text-sm text-destructive">Couldn&apos;t load stock: {error.message}</p>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile label="Total items" value={String(totalItems)} tone="dark" />
+        {canManageStock ? (
+          <StatTile
+            label="Stock value"
+            value={`£${stockValue.toLocaleString("en-GB", { maximumFractionDigits: 0 })}`}
+            tone="primary"
+          />
+        ) : (
+          <StatTile label="Types tracked" value="Parts & tyres" tone="primary" />
+        )}
+        <StatTile
+          label="Low stock"
+          value={String(lowStockCount)}
+          tone="destructive"
+          href="/dashboard/stock/reorder-report"
+        />
+        <StatTile label="Stocktakes this month" value={String(stockTakesThisMonth ?? 0)} tone="violet" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
+          <Link href="/dashboard/stock/search">Stock Search</Link>
+        </Button>
+        {canManageStock && (
+          <>
+            <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
+              <Link href="/dashboard/stock/add-order">Add Order</Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
+              <Link href="/dashboard/stock/receive-stock">Receive Stock</Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
+              <Link href="/dashboard/stock/return-stock">Return Stock</Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
+              <Link href="/dashboard/stock/black-circle">Black Circles Stock</Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
+              <Link href="/dashboard/stock/reporting">Reporting</Link>
+            </Button>
+          </>
+        )}
+      </div>
+
+      {canManageStock && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-4 text-sm text-muted-foreground">
+          <span className="font-medium">More:</span>
+          <Link href="/dashboard/stock/new" className="underline-offset-4 hover:underline">
+            Add product
+          </Link>
+          <Link href="/dashboard/stock/receive" className="underline-offset-4 hover:underline">
+            Receive stock (direct)
+          </Link>
+          <Link
+            href="/dashboard/stock/on-account/receive"
+            className="underline-offset-4 hover:underline"
+          >
+            Receive on-account stock (direct)
+          </Link>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function StatTile({
@@ -111,305 +163,5 @@ function StatTile({
     </Link>
   ) : (
     <div className={className}>{content}</div>
-  )
-}
-
-export default async function StockPage(props: PageProps<"/dashboard/stock">) {
-  const searchParams = (await props.searchParams) as StockSearchParams
-  const supabase = await createClient()
-
-  // getCurrentStaff() doesn't depend on the suppliers/stock queries (or
-  // vice versa), so run all four concurrently. See the perf note in
-  // CLAUDE.md.
-  const [
-    staff,
-    { data: suppliers },
-    stockQuery,
-    { count: stockTakesThisMonth },
-    { data: unpaidLots },
-  ] = await Promise.all([
-    getCurrentStaff(),
-    supabase.from("suppliers").select("id, name").order("name"),
-    (() => {
-      let query = supabase
-        .from("stock_items")
-        .select("*, suppliers(name), part_details(*), tyre_details(*)")
-        .eq("is_active", true)
-        .order("name")
-
-      if (searchParams.item_type) {
-        query = query.eq("item_type", searchParams.item_type)
-      }
-      if (searchParams.supplier_id) {
-        query = query.eq("supplier_id", searchParams.supplier_id)
-      }
-      if (searchParams.q) {
-        const q = searchParams.q.replace(/[%,]/g, "")
-        query = query.or(`id_number.ilike.%${q}%,name.ilike.%${q}%`)
-      }
-      return query
-    })(),
-    supabase
-      .from("stock_takes")
-      .select("id", { count: "exact", head: true })
-      .gte("started_at", new Date(new Date().setDate(1)).toISOString()),
-    // Drives the dynamic "on account" badge/filter below — a product only
-    // shows as on-account while it actually owes payment (status
-    // 'committed', not yet paid), not just because it's catalogued as an
-    // on-account product type. See the comment on matchesStockStatus.
-    supabase.from("consignment_stock_lots").select("stock_item_id").eq("status", "committed").is("paid_at", null),
-  ])
-  const canManageStock = staff?.canManageStock ?? false
-  const owesPaymentIds = new Set((unpaidLots ?? []).map((l) => l.stock_item_id))
-
-  const { data, error } = stockQuery
-  // Type-specific filters (make/model, tyre size/season/tier/commercial)
-  // are applied in-memory below rather than via embedded-resource query
-  // filters — simpler to keep correct without a live project to test
-  // PostgREST's `!inner` embedded-filter syntax against. Revisit if the
-  // catalogue grows large enough that this needs to move server-side.
-  const allItems = (data ?? []) as unknown as StockItemWithDetails[]
-  const items = allItems.filter(
-    (item) =>
-      matchesTypeFilters(item, searchParams) && matchesStockStatus(item, searchParams, owesPaymentIds)
-  )
-
-  const totalItems = allItems.length
-  const lowStockCount = allItems.filter(
-    (item) => item.quantity_on_hand < item.ideal_stock_level
-  ).length
-  const stockValue = allItems.reduce(
-    (sum, item) => sum + item.quantity_on_hand * item.cost_price,
-    0
-  )
-  const supplierCount = new Set(allItems.map((item) => item.supplier_id).filter(Boolean)).size
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <h1 className="font-heading text-3xl font-bold tracking-tight sm:text-[38px]">
-            Stock
-          </h1>
-          <p className="text-[15px] font-medium text-muted-foreground">
-            {totalItems} parts and tyres on file
-            {supplierCount > 0
-              ? ` across ${supplierCount} supplier${supplierCount === 1 ? "" : "s"}`
-              : ""}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="lg">
-            <Link href="/dashboard/stock/reorder-report">Reorder report</Link>
-          </Button>
-          {canManageStock && (
-            <>
-              <Button asChild variant="outline" size="lg">
-                <Link href="/dashboard/stock/receive">Receive stock</Link>
-              </Button>
-              <Button asChild variant="outline" size="lg">
-                <Link href="/dashboard/stock/on-account/pending-payments">
-                  Pending payments
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="lg">
-                <Link href="/dashboard/stock/black-circle">Black Circle stock</Link>
-              </Button>
-              <Button asChild size="lg">
-                <Link href="/dashboard/stock/new">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                  Add product
-                </Link>
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Total items" value={String(totalItems)} tone="dark" />
-        {canManageStock ? (
-          <StatTile
-            label="Stock value"
-            value={`£${stockValue.toLocaleString("en-GB", { maximumFractionDigits: 0 })}`}
-            tone="primary"
-          />
-        ) : (
-          <StatTile label="Types tracked" value="Parts & tyres" tone="primary" />
-        )}
-        <StatTile
-          label="Low stock"
-          value={String(lowStockCount)}
-          tone="destructive"
-          href="/dashboard/stock/reorder-report"
-        />
-        <StatTile
-          label="Stocktakes this month"
-          value={String(stockTakesThisMonth ?? 0)}
-          tone="violet"
-        />
-      </div>
-
-      <StockFilters suppliers={suppliers ?? []} />
-
-      {searchParams.error && (
-        <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-          {searchParams.error}
-        </p>
-      )}
-
-      {error && (
-        <p className="text-sm text-destructive">
-          Couldn&apos;t load stock: {error.message}
-        </p>
-      )}
-
-      <div className="overflow-x-auto rounded-2xl border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted text-left text-xs font-bold tracking-wide text-muted-foreground uppercase">
-              <th className="px-4 py-3.5 font-bold">ID</th>
-              <th className="px-4 py-3.5 font-bold">Item</th>
-              <th className="px-4 py-3.5 font-bold">Detail</th>
-              <th className="px-4 py-3.5 font-bold">Supplier</th>
-              <th className="px-4 py-3.5 text-right font-bold">On hand</th>
-              <th className="px-4 py-3.5 text-right font-bold">Ideal</th>
-              {canManageStock && (
-                <>
-                  <th className="px-4 py-3.5 text-right font-bold">Cost</th>
-                  <th className="px-4 py-3.5 text-right font-bold">Sell</th>
-                  <th className="px-4 py-3.5 font-bold">Actions</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, i) => (
-              <ClickableRow
-                key={item.id}
-                href={`/dashboard/stock/${item.id}`}
-                className={`border-b last:border-0 hover:bg-accent/50 ${
-                  i % 2 === 1 ? "bg-muted/40" : ""
-                }`}
-              >
-                <td className="px-4 py-3.5">
-                  <Link
-                    href={`/dashboard/stock/${item.id}`}
-                    className="font-bold underline-offset-4 hover:underline"
-                  >
-                    {item.id_number}
-                  </Link>
-                </td>
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <Badge variant={item.item_type === "part" ? "part" : "tyre"}>
-                      {item.item_type}
-                    </Badge>
-                    <span className="font-semibold">{item.name}</span>
-                    {owesPaymentIds.has(item.id) && (
-                      <Badge variant="outline" className="normal-case">
-                        on account
-                      </Badge>
-                    )}
-                    {item.is_black_circle && (
-                      <Badge variant="outline" className="normal-case">
-                        black circle
-                      </Badge>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-muted-foreground">
-                  {item.item_type === "part" && item.part_details
-                    ? [item.part_details.vehicle_make, item.part_details.vehicle_model]
-                        .filter(Boolean)
-                        .join(" ") || item.vehicle_note
-                    : null}
-                  {item.item_type === "tyre" && item.tyre_details
-                    ? [
-                        item.tyre_details.size_label,
-                        item.tyre_details.season,
-                        item.tyre_details.tier,
-                        item.tyre_details.load_rating !== "standard"
-                          ? item.tyre_details.load_rating.toUpperCase()
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")
-                    : null}
-                </td>
-                <td className="px-4 py-3.5 text-muted-foreground">
-                  {item.suppliers?.name ?? "—"}
-                </td>
-                <td
-                  className={`px-4 py-3.5 text-right ${
-                    item.quantity_on_hand < item.ideal_stock_level
-                      ? "font-extrabold text-destructive"
-                      : "font-semibold"
-                  }`}
-                >
-                  {item.quantity_on_hand}
-                </td>
-                <td className="px-4 py-3.5 text-right text-muted-foreground">
-                  {item.ideal_stock_level}
-                </td>
-                {canManageStock && (
-                  <>
-                    <td className="px-4 py-3.5 text-right font-semibold">
-                      £{item.cost_price.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-semibold">
-                      £{item.selling_price.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {item.is_consignment && (
-                        <Link
-                          href={`/dashboard/stock/on-account/receive?id=${encodeURIComponent(
-                            item.id_number
-                          )}`}
-                          className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
-                        >
-                          Add on-account stock
-                        </Link>
-                      )}
-                      {item.is_black_circle && (
-                        <Link
-                          href={`/dashboard/stock/black-circle/receive?id=${encodeURIComponent(
-                            item.id_number
-                          )}`}
-                          className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
-                        >
-                          Add Black Circle stock
-                        </Link>
-                      )}
-                    </td>
-                  </>
-                )}
-              </ClickableRow>
-            ))}
-            {items.length === 0 && !error && (
-              <tr>
-                <td
-                  colSpan={canManageStock ? 9 : 6}
-                  className="px-4 py-8 text-center text-muted-foreground"
-                >
-                  No stock items match your search.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
   )
 }

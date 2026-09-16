@@ -28,7 +28,10 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
       }
     }
     startTransition(() => {
-      router.push(`/dashboard/stock?${params.toString()}`)
+      // Moved from the old /dashboard/stock hub page to /dashboard/stock/
+      // search (Sept 2026 stock status redesign) — this form now lives
+      // only on that page.
+      router.push(`/dashboard/stock/search?${params.toString()}`)
     })
   }
 

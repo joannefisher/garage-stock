@@ -8,39 +8,30 @@ import { SubmitButton } from "@/components/ui/submit-button"
 import { ScannableIdInput } from "@/components/scan/scannable-id-input"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 
-import { receiveStock } from "./actions"
+import { addStockOrder } from "./actions"
 
-type ReceiveStockSearchParams = {
+type AddOrderSearchParams = {
   error?: string
   value?: string
-  id?: string
-  received?: string
-  receivedName?: string
-  receivedQty?: string
-  receivedCost?: string
+  ordered?: string
+  orderedName?: string
+  orderedQty?: string
 }
 
-export default async function ReceiveStockPage(
-  props: PageProps<"/dashboard/stock/receive">
-) {
-  const searchParams = (await props.searchParams) as ReceiveStockSearchParams
+export default async function AddOrderPage(props: PageProps<"/dashboard/stock/add-order">) {
+  const searchParams = (await props.searchParams) as AddOrderSearchParams
 
   const staff = await getCurrentStaff()
   if (!staff?.canManageStock) {
     redirect(
-      `/dashboard/stock?error=${encodeURIComponent(
-        "Only admins and managers can receive stock."
-      )}`
+      `/dashboard/stock?error=${encodeURIComponent("Only admins and managers can log a stock order.")}`
     )
   }
 
-  const confirmation = searchParams.received
+  const confirmation = searchParams.ordered
     ? [
-        searchParams.receivedQty ? `+${searchParams.receivedQty}` : null,
-        `${searchParams.received}${
-          searchParams.receivedName ? ` — ${searchParams.receivedName}` : ""
-        }`,
-        searchParams.receivedCost ? `cost price now £${searchParams.receivedCost}` : null,
+        searchParams.orderedQty ? `+${searchParams.orderedQty}` : null,
+        `${searchParams.ordered}${searchParams.orderedName ? ` — ${searchParams.orderedName}` : ""}`,
       ]
         .filter(Boolean)
         .join(" · ")
@@ -49,15 +40,11 @@ export default async function ReceiveStockPage(
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Receive stock</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Add order</h1>
         <p className="text-muted-foreground">
-          Scan or type an existing product to add quantity that&apos;s just come in, update its
-          cost price, or both — for a brand new product, use &quot;Add product&quot; instead. This
-          is also where{" "}
-          <Link href="/dashboard/stock/receive-stock" className="font-medium underline-offset-4 hover:underline">
-            Receive Stock
-          </Link>{" "}
-          lands once you&apos;ve picked which existing product a scanned barcode matches.
+          Mirror an order you&apos;ve placed with a supplier so you can see what&apos;s pending —
+          this doesn&apos;t add to stock on hand yet. Use &quot;Receive stock&quot; once it
+          actually arrives.
         </p>
       </div>
 
@@ -69,53 +56,54 @@ export default async function ReceiveStockPage(
 
       {confirmation && (
         <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
-          ✓ Updated {confirmation}
+          ✓ Logged as ordered: {confirmation}
         </p>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Receive / update an item</CardTitle>
+          <CardTitle>New order</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={receiveStock} className="flex flex-col gap-4">
+          <form action={addStockOrder} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="id_or_barcode">ID / barcode</Label>
               <ScannableIdInput
                 id="id_or_barcode"
                 name="id_or_barcode"
-                defaultValue={searchParams.value ?? searchParams.id ?? ""}
+                defaultValue={searchParams.value ?? ""}
                 required
                 autoFocus
               />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="quantity">Quantity received</Label>
+                <Label htmlFor="quantity">Quantity ordered</Label>
                 <Input
                   id="quantity"
                   name="quantity"
                   type="number"
-                  min="0"
-                  placeholder="0"
+                  min="1"
+                  defaultValue="1"
+                  required
                   autoComplete="off"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cost_price">New cost price exc. VAT (£)</Label>
+                <Label htmlFor="cost_price">Cost price exc. VAT (£)</Label>
                 <Input
                   id="cost_price"
                   name="cost_price"
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Leave blank to keep current"
+                  defaultValue="0"
                   autoComplete="off"
                 />
               </div>
             </div>
             <div className="flex flex-col gap-1.5 sm:w-1/2">
-              <Label htmlFor="price_inc_vat">Price inc. VAT (£, optional)</Label>
+              <Label htmlFor="price_inc_vat">Cost price inc. VAT (£, optional)</Label>
               <Input
                 id="price_inc_vat"
                 name="price_inc_vat"
@@ -126,9 +114,19 @@ export default async function ReceiveStockPage(
                 autoComplete="off"
               />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="notes">Notes</Label>
+              <Input id="notes" name="notes" placeholder="e.g. PO number, expected date" />
+            </div>
             <p className="text-sm text-muted-foreground">
-              Leave quantity at 0 to only update the cost price, e.g. if a supplier has changed
-              their price but nothing new has arrived yet.
+              The product must already exist on file — if it doesn&apos;t,{" "}
+              <Link
+                href="/dashboard/stock/new"
+                className="font-medium underline-offset-4 hover:underline"
+              >
+                add it as a product
+              </Link>{" "}
+              first.
             </p>
             <SubmitButton pendingText="Saving…">Save and scan next</SubmitButton>
           </form>
