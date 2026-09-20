@@ -53,3 +53,41 @@ export async function getPendingPaymentsReport(
     error: error ? { message: error.message } : null,
   }
 }
+
+/**
+ * Fetches the "payment date is in the future" report Joanne asked for —
+ * On Account stock, committed and unpaid, where payment_due_date hasn't
+ * arrived yet. Same view as the Pending Payments report above (this is a
+ * narrower slice of it, not a separate concept: "still owed" vs. "not
+ * yet due"), with the extra `payment_due_date > today` filter applied as
+ * a plain column comparison. A null payment_due_date never matches —
+ * there's no future date to compare against.
+ */
+export async function getFuturePaymentsReport(params: PendingPaymentsParams): Promise<PendingPaymentsReport> {
+  const supabase = await createClient()
+  const today = new Date().toISOString().slice(0, 10)
+
+  let query = supabase.from("v_consignment_pending_payments").select("*").gt("payment_due_date", today)
+
+  if (params.supplier_id) {
+    query = query.eq("supplier_id", params.supplier_id)
+  }
+
+  switch (params.sort) {
+    case "supplier_name":
+      query = query.order("supplier_name", { ascending: true, nullsFirst: false })
+      break
+    case "amount_due":
+      query = query.order("amount_due", { ascending: false })
+      break
+    default:
+      query = query.order("payment_due_date", { ascending: true })
+  }
+
+  const { data, error } = await query
+
+  return {
+    rows: (data ?? []) as unknown as ConsignmentPendingPaymentRow[],
+    error: error ? { message: error.message } : null,
+  }
+}

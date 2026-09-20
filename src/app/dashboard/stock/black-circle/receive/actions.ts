@@ -67,7 +67,21 @@ export async function receiveBlackCircleStock(formData: FormData) {
   ])
 
   if (!stockItem) {
-    fail(`No product found for "${idOrBarcode}". Set it up first under "Add product".`)
+    // Sept 2026: rather than a hard stop, follow the same "create it,
+    // then bounce back" pattern as the Add Order flow's mid-flow product
+    // creation — the product is created with "Black Circle stock"
+    // already checked (still editable) and lands right back here with
+    // quantity/job preserved, ready to actually receive it. See
+    // stock-item-form.tsx's defaultIsBlackCircle and new/actions.ts's
+    // safeRedirectTo/withParam.
+    const backTo = new URLSearchParams({ job_id: jobId })
+    if (quantityStr) backTo.set("quantity", quantityStr)
+    const params = new URLSearchParams({
+      id_number: idOrBarcode,
+      is_black_circle: "true",
+      redirect_to: `/dashboard/stock/black-circle/receive?${backTo.toString()}`,
+    })
+    redirect(`/dashboard/stock/new?${params.toString()}`)
   }
   if (!stockItem.is_black_circle) {
     fail(`"${stockItem.name}" isn't marked as Black Circle stock. Use "Receive stock" instead.`)

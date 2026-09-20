@@ -120,7 +120,7 @@ export async function receiveStock(formData: FormData) {
     quantity > 0 && invoiceNumber
       ? supabase
           .from("stock_lots")
-          .select("id, quantity, quantity_received")
+          .select("id, quantity, quantity_received, return_by_date")
           .eq("stock_item_id", stockItem.id)
           .eq("status", "ordered")
           .eq("invoice_number", invoiceNumber)
@@ -156,6 +156,12 @@ export async function receiveStock(formData: FormData) {
         created_by: staff.id,
         invoice_number: invoiceNumber || null,
         order_lot_id: matchedOrder?.id ?? null,
+        // Carried over from the matched order lot, same reasoning as
+        // orders/actions.ts:receiveOrderQuantity — a return deadline set
+        // when the order was placed shouldn't vanish just because this
+        // receipt came in through the invoice auto-match path instead of
+        // an explicit "accept this order" click.
+        return_by_date: matchedOrder?.return_by_date ?? null,
       })
       .select("id")
       .single()

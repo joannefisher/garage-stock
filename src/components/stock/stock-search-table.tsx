@@ -132,7 +132,6 @@ export function StockSearchTable({
                 </button>
               </th>
             ))}
-            {canManageStock && <th className="px-4 py-3.5 font-bold">Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -181,31 +180,13 @@ export function StockSearchTable({
                 <>
                   <td className="px-4 py-3.5 text-right font-semibold">£{item.cost_price.toFixed(2)}</td>
                   <td className="px-4 py-3.5 text-right font-semibold">£{item.selling_price.toFixed(2)}</td>
-                  <td className="px-4 py-3.5">
-                    {item.is_consignment && (
-                      <Link
-                        href={`/dashboard/stock/on-account/receive?id=${encodeURIComponent(item.id_number)}`}
-                        className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
-                      >
-                        Add on-account stock
-                      </Link>
-                    )}
-                    {item.is_black_circle && (
-                      <Link
-                        href={`/dashboard/stock/black-circle/receive?id=${encodeURIComponent(item.id_number)}`}
-                        className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
-                      >
-                        Add Black Circle stock
-                      </Link>
-                    )}
-                  </td>
                 </>
               )}
             </tr>
           ))}
           {sorted.length === 0 && (
             <tr>
-              <td colSpan={canManageStock ? 9 : 6} className="px-4 py-8 text-center text-muted-foreground">
+              <td colSpan={canManageStock ? 8 : 6} className="px-4 py-8 text-center text-muted-foreground">
                 No stock items match your search.
               </td>
             </tr>

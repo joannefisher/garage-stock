@@ -103,7 +103,8 @@ export default async function OrdersPage(props: PageProps<"/dashboard/orders">) 
             <thead>
               <tr className="border-b text-left text-muted-foreground">
                 <th className="px-2 py-1.5 font-medium">Invoice #</th>
-                <th className="px-2 py-1.5 font-medium">Date ordered</th>
+                <th className="px-2 py-1.5 font-medium">Order date</th>
+                <th className="px-2 py-1.5 font-medium">Payment due</th>
                 <th className="px-2 py-1.5 font-medium">Supplier</th>
                 <th className="px-2 py-1.5 font-medium">Product</th>
                 <th className="px-2 py-1.5 text-right font-medium">Ordered</th>
@@ -120,7 +121,30 @@ export default async function OrdersPage(props: PageProps<"/dashboard/orders">) 
                     {lot.invoice_number ?? "—"}
                   </td>
                   <td className="px-2 py-1.5 whitespace-nowrap">
-                    {new Date(lot.ordered_at ?? lot.created_at).toLocaleDateString("en-GB")}
+                    {/* order_date (0020) is only populated for orders placed since this
+                        round — older rows fall back to the automatic ordered_at
+                        timestamp, then created_at, same as before this column existed. */}
+                    {new Date(lot.order_date ?? lot.ordered_at ?? lot.created_at).toLocaleDateString(
+                      "en-GB"
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    {lot.payment_due_date ? (
+                      <span className="flex items-center gap-1.5">
+                        {new Date(lot.payment_due_date).toLocaleDateString("en-GB")}
+                        {lot.invoice_paid_at ? (
+                          <span className="rounded-full bg-green-600/10 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+                            Paid
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-amber-600/10 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                            Unpaid
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-2 py-1.5 text-muted-foreground">{lot.suppliers?.name ?? "—"}</td>
                   <td className="px-2 py-1.5">
@@ -155,7 +179,7 @@ export default async function OrdersPage(props: PageProps<"/dashboard/orders">) 
               ))}
               {orders.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-2 py-6 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-2 py-6 text-center text-muted-foreground">
                     No outstanding orders — everything placed has arrived.
                   </td>
                 </tr>

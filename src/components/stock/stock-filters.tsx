@@ -98,6 +98,20 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
           </select>
         </div>
 
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="lot_status">Ordered / Owned</Label>
+          <select
+            id="lot_status"
+            name="lot_status"
+            defaultValue={searchParams.get("lot_status") ?? ""}
+            className="border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          >
+            <option value="">Any</option>
+            <option value="ordered">Ordered</option>
+            <option value="owned">Owned</option>
+          </select>
+        </div>
+
         <div className="flex items-center pt-6">
           <label className="flex items-center gap-2 text-sm">
             <input

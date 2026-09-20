@@ -1,16 +1,9 @@
 import { redirect } from "next/navigation"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { SubmitButton } from "@/components/ui/submit-button"
-import { ScannableIdInput } from "@/components/scan/scannable-id-input"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 
-import { receiveConsignmentStock } from "./actions"
-
-const DEFAULT_DUE_BACK_DAYS = 30
-const DEFAULT_PAYMENT_TERMS_DAYS = 30
+import { ReceiveConsignmentForm } from "./receive-consignment-form"
 
 type ReceiveConsignmentSearchParams = {
   error?: string
@@ -27,12 +20,6 @@ type ReceiveConsignmentSearchParams = {
   receivedName?: string
   receivedQty?: string
   dueBack?: string
-}
-
-function addDays(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
 }
 
 export default async function ReceiveConsignmentStockPage(
@@ -89,109 +76,16 @@ export default async function ReceiveConsignmentStockPage(
           <CardTitle>New on-account item</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={receiveConsignmentStock} className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="flex flex-col gap-1.5 sm:col-span-2">
-                <Label htmlFor="id_or_barcode">ID / barcode</Label>
-                <ScannableIdInput
-                  id="id_or_barcode"
-                  name="id_or_barcode"
-                  defaultValue={searchParams.value ?? searchParams.id ?? ""}
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="quantity">Quantity received</Label>
-                <Input
-                  id="quantity"
-                  name="quantity"
-                  type="number"
-                  min="1"
-                  defaultValue={searchParams.quantity ?? "1"}
-                  required
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invoice_number">Invoice number</Label>
-                <Input
-                  id="invoice_number"
-                  name="invoice_number"
-                  defaultValue={searchParams.invoice_number ?? ""}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="vehicle_registration">Car registration</Label>
-                <Input
-                  id="vehicle_registration"
-                  name="vehicle_registration"
-                  defaultValue={searchParams.vehicle_registration ?? ""}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cost_price">Price exc. VAT (£)</Label>
-                <Input
-                  id="cost_price"
-                  name="cost_price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  defaultValue={searchParams.cost_price ?? ""}
-                  required
-                  autoComplete="off"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="price_inc_vat">Price inc. VAT (£)</Label>
-                <Input
-                  id="price_inc_vat"
-                  name="price_inc_vat"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  defaultValue={searchParams.price_inc_vat ?? ""}
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="due_back_at">Return deadline</Label>
-                <Input
-                  id="due_back_at"
-                  name="due_back_at"
-                  type="date"
-                  defaultValue={searchParams.due_back_at || addDays(DEFAULT_DUE_BACK_DAYS)}
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="payment_due_date">Payment due date</Label>
-                <Input
-                  id="payment_due_date"
-                  name="payment_due_date"
-                  type="date"
-                  defaultValue={
-                    searchParams.payment_due_date || addDays(DEFAULT_PAYMENT_TERMS_DAYS)
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Both dates default to 30 days from today — change them if the supplier&apos;s terms
-              are different.
-            </p>
-            <SubmitButton pendingText="Saving…">Save and scan next</SubmitButton>
-          </form>
+          <ReceiveConsignmentForm
+            defaultIdOrBarcode={searchParams.value ?? searchParams.id ?? ""}
+            defaultQuantity={searchParams.quantity}
+            defaultInvoiceNumber={searchParams.invoice_number}
+            defaultVehicleRegistration={searchParams.vehicle_registration}
+            defaultCostPrice={searchParams.cost_price}
+            defaultPriceIncVat={searchParams.price_inc_vat}
+            defaultDueBackAt={searchParams.due_back_at}
+            defaultPaymentDueDate={searchParams.payment_due_date}
+          />
         </CardContent>
       </Card>
     </div>

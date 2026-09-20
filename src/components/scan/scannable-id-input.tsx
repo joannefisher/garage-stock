@@ -36,6 +36,7 @@ export function ScannableIdInput({
   autoFocus,
   className,
   onScan,
+  onBlur,
 }: {
   id?: string
   name: string
@@ -46,6 +47,14 @@ export function ScannableIdInput({
   className?: string
   /** Fires with the decoded text right after a successful scan, in addition to it landing in the input. */
   onScan?: (value: string) => void
+  /**
+   * Fires with the field's current value when it loses focus (typed entry)
+   * or right after a successful scan (which never blurs the field, since
+   * focus never moved there) — added Sept 2026 for the on-account receive
+   * form's supplier-default lookup, which needs to react to "the user has
+   * finished entering an ID" regardless of how they entered it.
+   */
+  onBlur?: (value: string) => void
 }) {
   const [value, setValue] = useState(defaultValue ?? "")
   const [scanning, setScanning] = useState(false)
@@ -71,6 +80,7 @@ export function ScannableIdInput({
               const text = result.getText()
               setValue(text)
               onScan?.(text)
+              onBlur?.(text)
               controlsRef.current?.stop()
               setScanning(false)
             }
@@ -100,7 +110,7 @@ export function ScannableIdInput({
       controlsRef.current?.stop()
       controlsRef.current = null
     }
-  }, [scanning, onScan])
+  }, [scanning, onScan, onBlur])
 
   function startScanning() {
     setScanError(null)
@@ -115,6 +125,7 @@ export function ScannableIdInput({
           name={name}
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onBlur={(e) => onBlur?.(e.target.value)}
           required={required}
           placeholder={placeholder}
           autoFocus={autoFocus}

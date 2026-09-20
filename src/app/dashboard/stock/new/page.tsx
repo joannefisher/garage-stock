@@ -23,6 +23,10 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
   // doesn't strand the user back on the plain Stock page. See
   // new/actions.ts's safeRedirectTo/withParam.
   const redirectTo = typeof searchParams.redirect_to === "string" ? searchParams.redirect_to : undefined
+  // Prefilled when arriving from the Black Circle receive screen's
+  // "create this product" step (Sept 2026) — see stock-item-form.tsx's
+  // defaultIsBlackCircle comment.
+  const isBlackCircle = searchParams.is_black_circle === "true"
 
   const staff = await getCurrentStaff()
   if (!staff?.canManageStock) {
@@ -65,6 +69,7 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
             error={error}
             defaultIdNumber={idNumber}
             defaultSupplierId={supplierId}
+            defaultIsBlackCircle={isBlackCircle}
             redirectTo={redirectTo}
           />
         </CardContent>

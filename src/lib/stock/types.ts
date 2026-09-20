@@ -17,6 +17,12 @@ export interface StockSearchParams {
   supplier_id?: string
   stock_status?: "low" | "out" | "ok"
   consignment_only?: string
+  /**
+   * Ordered/Owned breakdown filter (Sept 2026 Orders round, Overview
+   * widget click-through) — "On Account" reuses `consignment_only`
+   * rather than a third value here. See status-breakdown.ts.
+   */
+  lot_status?: "ordered" | "owned"
   vehicle_make?: string
   vehicle_model?: string
   tyre_width?: string

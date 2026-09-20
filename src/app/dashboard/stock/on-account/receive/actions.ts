@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import { friendlyDbError } from "@/lib/supabase/errors"
+import { addDaysISO, nextDayOfMonthISO } from "@/lib/stock/date-defaults"
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim()
@@ -13,6 +14,60 @@ function str(formData: FormData, key: string): string {
 function optionalStr(formData: FormData, key: string): string | null {
   const value = str(formData, key)
   return value === "" ? null : value
+}
+
+/**
+ * Looks up the supplier-driven Return Date / Payment Due Date defaults for
+ * a scanned/typed product ID — the "Orders + On Account" half of Joanne's
+ * answer on how far supplier default terms (default_return_days /
+ * default_payment_due_day, 0020_supplier_defaults_and_order_dates.sql)
+ * should extend. Unlike the Add Order form (server-rendered with the
+ * product already chosen via a supplier-first, multi-step flow), this
+ * single-page form only learns the product's ID at the moment the field
+ * is filled in, so this is called from the client (receive-consignment-
+ * form.tsx) once the ID field loses focus, rather than computed at
+ * render.
+ *
+ * Returns null whenever there's nothing useful to prefill (product not
+ * found, no supplier, or neither default set) — the caller just leaves
+ * the existing 30-day fallback in place in that case. Not a security
+ * boundary (RLS is), but gated the same as the rest of this screen anyway
+ * since there's no legitimate caller for it outside an admin/manager
+ * mid-form.
+ */
+export async function lookupSupplierDefaults(
+  idOrBarcode: string
+): Promise<{ returnByDate: string | null; paymentDueDate: string | null; supplierName: string | null } | null> {
+  const staff = await getCurrentStaff()
+  if (!staff?.canManageStock) return null
+
+  const value = idOrBarcode.trim()
+  if (!value) return null
+
+  const supabase = await createClient()
+  const { data: stockItem } = await supabase
+    .from("stock_items")
+    .select("supplier_id, suppliers(name, default_return_days, default_payment_due_day)")
+    .ilike("id_number", value)
+    .maybeSingle()
+
+  const supplier = (
+    stockItem as unknown as {
+      suppliers: { name: string; default_return_days: number | null; default_payment_due_day: number | null } | null
+    } | null
+  )?.suppliers
+
+  if (!supplier) return null
+
+  const today = new Date().toISOString().slice(0, 10)
+  return {
+    returnByDate: supplier.default_return_days != null ? addDaysISO(supplier.default_return_days, today) : null,
+    paymentDueDate:
+      supplier.default_payment_due_day != null
+        ? nextDayOfMonthISO(supplier.default_payment_due_day, today)
+        : null,
+    supplierName: supplier.name,
+  }
 }
 
 /**

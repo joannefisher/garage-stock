@@ -21,6 +21,7 @@ export function StockItemForm({
   error,
   defaultIdNumber,
   defaultSupplierId,
+  defaultIsBlackCircle,
   redirectTo,
 }: {
   suppliers: SupplierOption[]
@@ -42,6 +43,13 @@ export function StockItemForm({
    */
   defaultSupplierId?: string
   /**
+   * Pre-checks "Black Circle stock" (still editable) and defaults item
+   * type to Tyre — used when this form is reached from the Black Circle
+   * receive screen's "create this product" step (Sept 2026), which only
+   * ever deals in Black Circle tyres.
+   */
+  defaultIsBlackCircle?: boolean
+  /**
    * Where to send the user after a successful save, via a hidden
    * `redirect_to` field the action reads (see new/actions.ts's
    * safeRedirectTo) — same pattern already used by the on-account/
@@ -50,12 +58,12 @@ export function StockItemForm({
    */
   redirectTo?: string
 }) {
-  const [itemType, setItemType] = useState<"part" | "tyre">("part")
+  const [itemType, setItemType] = useState<"part" | "tyre">(defaultIsBlackCircle ? "tyre" : "part")
   // Black Circle tyres are never owned or charged for (0016_black_circle_
   // stock.sql) — hiding the price fields here is the UI half of that;
   // the server action hard-zeros both regardless of what's submitted, so
   // this hide is a convenience, not the enforcement.
-  const [isBlackCircle, setIsBlackCircle] = useState(false)
+  const [isBlackCircle, setIsBlackCircle] = useState(defaultIsBlackCircle ?? false)
 
   return (
     <form action={action} className="flex flex-col gap-6">

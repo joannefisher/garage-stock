@@ -7,9 +7,11 @@ import { getCurrentStaff } from "@/lib/auth/current-staff"
 /**
  * Reporting hub (Sept 2026 stock status redesign, item 8 of Joanne's
  * user journey: "for now move the reorder report and pending payments
- * actions under this ui"). Just a landing page linking to the two
- * existing reports, unchanged — nothing about either report itself
- * changes here, only where you get to them from.
+ * actions under this ui"). Originally just a landing page linking to the
+ * two existing reports — the Sept 2026 Orders round adds four more:
+ * Orders report, Orders due, Payment due in future, and Returnable
+ * stock (the last of which the Overview page also links to directly via
+ * its own count widget).
  */
 export default async function StockReportingPage() {
   const staff = await getCurrentStaff()
@@ -45,6 +47,54 @@ export default async function StockReportingPage() {
             <CardContent>
               <p className="text-sm text-muted-foreground">
                 On-account stock that&apos;s been committed and is now owed to the supplier.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/dashboard/stock/reporting/orders">
+          <Card className="h-full transition-opacity hover:opacity-90">
+            <CardHeader>
+              <CardTitle>Orders report</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Every order ever placed, filterable by supplier and invoice number.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/dashboard/stock/reporting/orders-due">
+          <Card className="h-full transition-opacity hover:opacity-90">
+            <CardHeader>
+              <CardTitle>Orders due</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Orders not yet due, or whose invoice isn&apos;t marked paid.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/dashboard/stock/reporting/future-payments">
+          <Card className="h-full transition-opacity hover:opacity-90">
+            <CardHeader>
+              <CardTitle>Payment due in future</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                On-account stock owed to the supplier, with the payment date still ahead.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/dashboard/stock/reporting/returnable-stock">
+          <Card className="h-full transition-opacity hover:opacity-90">
+            <CardHeader>
+              <CardTitle>Returnable stock</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Owned and on-account stock that can still be sent back to its supplier.
               </p>
             </CardContent>
           </Card>

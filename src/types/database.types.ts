@@ -90,6 +90,11 @@ export type SupplierRow = {
   is_active: boolean
   created_at: string
   updated_at: string
+  // 0020_supplier_defaults_and_order_dates.sql — used to auto-fill an
+  // order's Return Date / Payment Due Date; both nullable, no default
+  // offered on the form until set here.
+  default_return_days: number | null
+  default_payment_due_day: number | null
 }
 export type SupplierInsert = {
   id?: string
@@ -102,6 +107,8 @@ export type SupplierInsert = {
   is_active?: boolean
   created_at?: string
   updated_at?: string
+  default_return_days?: number | null
+  default_payment_due_day?: number | null
 }
 export type SupplierUpdate = Partial<SupplierInsert>
 
@@ -422,6 +429,17 @@ export type StockLotRow = {
   supplier_id: string | null
   quantity_received: number
   order_lot_id: string | null
+  // 0020_supplier_defaults_and_order_dates.sql — Orders only (order_date/
+  // invoice_date/payment_due_date/invoice_paid_at/invoice_paid_by).
+  // return_by_date is set on an 'ordered' lot and also copied onto the
+  // 'owned' lot(s) created when it's received — see that migration's
+  // header.
+  order_date: string | null
+  invoice_date: string | null
+  return_by_date: string | null
+  payment_due_date: string | null
+  invoice_paid_at: string | null
+  invoice_paid_by: string | null
 }
 export type StockLotInsert = {
   id?: string
@@ -441,6 +459,12 @@ export type StockLotInsert = {
   supplier_id?: string | null
   quantity_received?: number
   order_lot_id?: string | null
+  order_date?: string | null
+  invoice_date?: string | null
+  return_by_date?: string | null
+  payment_due_date?: string | null
+  invoice_paid_at?: string | null
+  invoice_paid_by?: string | null
 }
 export type StockLotUpdate = Partial<StockLotInsert>
 
@@ -786,6 +810,49 @@ export type ConsignmentPendingPaymentRow = {
   price_inc_vat: number | null
 }
 
+// v_orders_report (0021_orders_and_returnable_reports.sql) — every order
+// ever placed (status = 'ordered'), historical, not just outstanding.
+// Backs the Reporting-hub "Orders report" and "Orders due" report.
+export type OrdersReportRow = {
+  lot_id: string
+  stock_item_id: string
+  id_number: string
+  name: string
+  supplier_id: string | null
+  supplier_name: string | null
+  invoice_number: string | null
+  quantity: number
+  quantity_received: number
+  outstanding: number
+  cost_price: number
+  price_inc_vat: number | null
+  order_date: string | null
+  invoice_date: string | null
+  ordered_at: string | null
+  return_by_date: string | null
+  payment_due_date: string | null
+  invoice_paid_at: string | null
+}
+
+// v_returnable_stock (0021_orders_and_returnable_reports.sql) — union of
+// owned stock_lots and committed/unpaid on-account consignment_stock_lots
+// that each have a return deadline set.
+export type ReturnableStockRow = {
+  source: "owned" | "on_account"
+  lot_id: string
+  stock_item_id: string
+  id_number: string
+  name: string
+  supplier_id: string | null
+  supplier_name: string | null
+  quantity: number
+  cost_price: number
+  value: number
+  return_date: string
+  invoice_number: string | null
+  received_at: string
+}
+
 // ---------------------------------------------------------------------
 // Database (Supabase client generic parameter)
 // ---------------------------------------------------------------------
@@ -935,6 +1002,8 @@ export type Database = {
         Row: ConsignmentPendingPaymentRow
         Relationships: []
       }
+      v_orders_report: { Row: OrdersReportRow; Relationships: [] }
+      v_returnable_stock: { Row: ReturnableStockRow; Relationships: [] }
     }
     Functions: Record<string, never>
     Enums: {

@@ -2,6 +2,7 @@ import { StockFilters } from "@/components/stock/stock-filters"
 import { StockSearchTable } from "@/components/stock/stock-search-table"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
+import { getLotStatusItemSets } from "@/lib/stock/status-breakdown"
 import type { StockItemWithDetails, StockSearchParams } from "@/lib/stock/types"
 
 // Moved here unchanged from the old /dashboard/stock page (Sept 2026 stock
@@ -42,9 +43,17 @@ function matchesTypeFilters(item: StockItemWithDetails, params: StockSearchParam
 function matchesStockStatus(
   item: StockItemWithDetails,
   params: StockSearchParams,
-  owesPaymentIds: Set<string>
+  owesPaymentIds: Set<string>,
+  lotStatusSets: { orderedItemIds: Set<string>; ownedItemIds: Set<string> }
 ) {
   if (params.consignment_only === "true" && !owesPaymentIds.has(item.id)) return false
+
+  // Ordered/Owned breakdown filter (Sept 2026, Overview widget click-
+  // through) — "On Account" is the consignment_only checkbox above, not
+  // a third lot_status value. See status-breakdown.ts for what each set
+  // means.
+  if (params.lot_status === "ordered" && !lotStatusSets.orderedItemIds.has(item.id)) return false
+  if (params.lot_status === "owned" && !lotStatusSets.ownedItemIds.has(item.id)) return false
 
   if (params.stock_status === "out" && item.quantity_on_hand > 0) return false
   if (params.stock_status === "low" && item.quantity_on_hand >= item.ideal_stock_level) return false
@@ -57,7 +66,7 @@ export default async function StockSearchPage(props: PageProps<"/dashboard/stock
   const searchParams = (await props.searchParams) as StockSearchParams
   const supabase = await createClient()
 
-  const [staff, { data: suppliers }, stockQuery, { data: unpaidLots }] = await Promise.all([
+  const [staff, { data: suppliers }, stockQuery, { data: unpaidLots }, lotStatusSets] = await Promise.all([
     getCurrentStaff(),
     supabase.from("suppliers").select("id, name").order("name"),
     (() => {
@@ -76,6 +85,7 @@ export default async function StockSearchPage(props: PageProps<"/dashboard/stock
       return query
     })(),
     supabase.from("consignment_stock_lots").select("stock_item_id").eq("status", "committed").is("paid_at", null),
+    getLotStatusItemSets(),
   ])
   const canManageStock = staff?.canManageStock ?? false
   const owesPaymentIds = new Set((unpaidLots ?? []).map((l) => l.stock_item_id))
@@ -83,7 +93,9 @@ export default async function StockSearchPage(props: PageProps<"/dashboard/stock
   const { data, error } = stockQuery
   const allItems = (data ?? []) as unknown as StockItemWithDetails[]
   const items = allItems.filter(
-    (item) => matchesTypeFilters(item, searchParams) && matchesStockStatus(item, searchParams, owesPaymentIds)
+    (item) =>
+      matchesTypeFilters(item, searchParams) &&
+      matchesStockStatus(item, searchParams, owesPaymentIds, lotStatusSets)
   )
 
   return (

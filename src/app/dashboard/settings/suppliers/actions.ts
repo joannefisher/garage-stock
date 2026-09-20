@@ -15,6 +15,13 @@ function optionalStr(formData: FormData, key: string): string | null {
   return value === "" ? null : value
 }
 
+function optionalInt(formData: FormData, key: string): number | null {
+  const value = str(formData, key)
+  if (value === "") return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null
+}
+
 /**
  * Shared admin/manager gate for every action in this file — mirrors the
  * "Admins/managers can manage suppliers" RLS policy (0002_domain_schema.sql),
@@ -57,6 +64,8 @@ export async function createSupplier(formData: FormData) {
       email: optionalStr(formData, "email"),
       address: optionalStr(formData, "address"),
       notes: optionalStr(formData, "notes"),
+      default_return_days: optionalInt(formData, "default_return_days"),
+      default_payment_due_day: optionalInt(formData, "default_payment_due_day"),
     })
     .select("id")
     .single()
@@ -95,6 +104,8 @@ export async function updateSupplier(formData: FormData) {
       email: optionalStr(formData, "email"),
       address: optionalStr(formData, "address"),
       notes: optionalStr(formData, "notes"),
+      default_return_days: optionalInt(formData, "default_return_days"),
+      default_payment_due_day: optionalInt(formData, "default_payment_due_day"),
     })
     .eq("id", supplierId)
 

@@ -19,6 +19,11 @@ function withParam(path: string, key: string, value: string): string {
   return `${path}${path.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(value)}`
 }
 
+function optionalDate(formData: FormData, key: string): string | null {
+  const value = str(formData, key)
+  return value === "" ? null : value
+}
+
 /**
  * Places a stock order — Step C of the new supplier-first Add Order journey
  * (Sept 2026 Orders round, replacing the old single-step ../stock/add-order/
@@ -37,6 +42,13 @@ function withParam(path: string, key: string, value: string): string {
  *     mid-flow under a different supplier than originally chosen (see
  *     stock-item-form.tsx's defaultSupplierId) still order correctly
  *     against whichever supplier it actually ended up with.
+ *   - order_date/invoice_date/return_by_date/payment_due_date (0020_
+ *     supplier_defaults_and_order_dates.sql) are all optional here except
+ *     order_date, which the form always pre-fills to today — Return
+ *     Date/Payment Due Date are computed by the page from the supplier's
+ *     default_return_days/default_payment_due_day when set, but arrive
+ *     here as plain form fields (already resolved), same as any other
+ *     editable default.
  */
 export async function createStockOrder(formData: FormData) {
   const idOrBarcode = str(formData, "id_or_barcode")
@@ -46,6 +58,10 @@ export async function createStockOrder(formData: FormData) {
   const costPriceStr = str(formData, "cost_price")
   const priceIncVatStr = str(formData, "price_inc_vat")
   const notes = str(formData, "notes")
+  const orderDate = str(formData, "order_date")
+  const invoiceDate = optionalDate(formData, "invoice_date")
+  const returnByDate = optionalDate(formData, "return_by_date")
+  const paymentDueDate = optionalDate(formData, "payment_due_date")
 
   function fail(message: string): never {
     const params = new URLSearchParams({ error: message })
@@ -60,6 +76,7 @@ export async function createStockOrder(formData: FormData) {
 
   if (!idOrBarcode) fail("Choose a product first.")
   if (!invoiceNumber) fail("Invoice number is required to place an order.")
+  if (!orderDate) fail("Order date is required.")
   if (!Number.isFinite(quantity) || quantity <= 0) fail("Enter a quantity of at least 1.")
   if (!Number.isFinite(costPrice) || costPrice < 0) fail("Cost price must be 0 or more.")
   if (priceIncVat !== null && (!Number.isFinite(priceIncVat) || priceIncVat < 0)) {
@@ -90,6 +107,10 @@ export async function createStockOrder(formData: FormData) {
     ordered_at: new Date().toISOString(),
     invoice_number: invoiceNumber,
     supplier_id: stockItem.supplier_id,
+    order_date: orderDate,
+    invoice_date: invoiceDate,
+    return_by_date: returnByDate,
+    payment_due_date: paymentDueDate,
     notes: notes || null,
     created_by: staff.id,
   })
@@ -145,7 +166,7 @@ export async function receiveOrderQuantity(formData: FormData) {
   const { data: orderData } = await supabase
     .from("stock_lots")
     .select(
-      "id, stock_item_id, quantity, quantity_received, cost_price, price_inc_vat, invoice_number, supplier_id, status, stock_items(id_number, name)"
+      "id, stock_item_id, quantity, quantity_received, cost_price, price_inc_vat, invoice_number, supplier_id, status, return_by_date, stock_items(id_number, name)"
     )
     .eq("id", orderLotId)
     .maybeSingle()
@@ -161,6 +182,7 @@ export async function receiveOrderQuantity(formData: FormData) {
         invoice_number: string | null
         supplier_id: string | null
         status: string
+        return_by_date: string | null
         stock_items: { id_number: string; name: string } | null
       }
     | null
@@ -187,6 +209,12 @@ export async function receiveOrderQuantity(formData: FormData) {
       invoice_number: order.invoice_number,
       supplier_id: order.supplier_id,
       order_lot_id: order.id,
+      // Carried over from the order lot so a return deadline set at order
+      // time (supplier default or manually typed, 0020_supplier_defaults_
+      // and_order_dates.sql) survives onto the stock that's actually on
+      // the shelf — the Return Stock screen only ever looks at 'owned'
+      // lots, so leaving this null here would silently lose it.
+      return_by_date: order.return_by_date,
       notes: order.invoice_number
         ? `Received against order, invoice ${order.invoice_number}`
         : "Received against order",
@@ -230,4 +258,44 @@ export async function receiveOrderQuantity(formData: FormData) {
   target = withParam(target, "receivedName", name)
   target = withParam(target, "receivedQty", String(quantity))
   redirect(target)
+}
+
+/**
+ * Marks an order's invoice as paid — mirrors on-account/actions.ts's
+ * markConsignmentLotPaid exactly (same paid_at/paid_by-style pair, just
+ * named invoice_paid_at/invoice_paid_by on stock_lots per 0020_supplier_
+ * defaults_and_order_dates.sql). Lives on the new "Orders due" report
+ * rather than the plain Orders list: an order can be fully received
+ * (dropped off that list, which is scoped to outstanding quantity only)
+ * while its invoice is still unpaid, so this needs to work regardless of
+ * quantity_received — the only requirement is that it's still a
+ * 'ordered'-status lot (an order never changes status on receipt, see
+ * receiveOrderQuantity above) and not already marked paid.
+ */
+export async function markOrderInvoicePaid(formData: FormData) {
+  const redirectTo = safeRedirectTo(formData, "/dashboard/stock/reporting/orders-due")
+  const lotId = str(formData, "lot_id")
+
+  function fail(message: string): never {
+    redirect(withParam(redirectTo, "error", message))
+  }
+
+  if (!lotId) fail("That order could not be found.")
+
+  const staff = await getCurrentStaff()
+  if (!staff) redirect("/login")
+  if (!staff.canManageStock) fail("Only admins and managers can mark an invoice as paid.")
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from("stock_lots")
+    .update({ invoice_paid_at: new Date().toISOString(), invoice_paid_by: staff.id })
+    .eq("id", lotId)
+    .eq("status", "ordered")
+
+  if (error) {
+    fail(friendlyDbError(error, "Could not mark this invoice as paid."))
+  }
+
+  redirect(withParam(redirectTo, "paid", "1"))
 }

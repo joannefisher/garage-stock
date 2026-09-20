@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/ui/submit-button"
 import { BarcodeLookupForm } from "@/components/stock/barcode-lookup-form"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
+import { addDaysISO, nextDayOfMonthISO, todayISO } from "@/lib/stock/date-defaults"
 
 import { createStockOrder } from "../actions"
 
@@ -122,7 +123,7 @@ export default async function NewOrderPage(props: PageProps<"/dashboard/orders/n
 
   const { data: supplier } = await supabase
     .from("suppliers")
-    .select("id, name")
+    .select("id, name, default_return_days, default_payment_due_day")
     .eq("id", supplierId)
     .maybeSingle()
 
@@ -150,6 +151,20 @@ export default async function NewOrderPage(props: PageProps<"/dashboard/orders/n
     }
 
     const supplierMismatch = stockItem.supplier_id !== supplier.id
+
+    // Order Date defaults to today (a brand-new editable field, separate
+    // from the automatic `ordered_at` timestamp — Joanne's answer when
+    // asked). Return Date / Payment Due Date default from the supplier's
+    // new default_return_days / default_payment_due_day when set —
+    // otherwise left blank rather than guessing a number she never
+    // configured. All four stay fully editable.
+    const orderDateDefault = todayISO()
+    const returnByDefault =
+      supplier.default_return_days != null ? addDaysISO(supplier.default_return_days, orderDateDefault) : ""
+    const paymentDueDefault =
+      supplier.default_payment_due_day != null
+        ? nextDayOfMonthISO(supplier.default_payment_due_day, orderDateDefault)
+        : ""
 
     return (
       <div className="flex flex-col gap-4">
@@ -184,9 +199,15 @@ export default async function NewOrderPage(props: PageProps<"/dashboard/orders/n
             <form action={createStockOrder} className="flex flex-col gap-4">
               <input type="hidden" name="id_or_barcode" value={stockItem.id_number} />
               <input type="hidden" name="supplier_id" value={supplierId} />
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invoice_number">Invoice / reference number *</Label>
-                <Input id="invoice_number" name="invoice_number" required autoFocus />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="invoice_number">Invoice / reference number *</Label>
+                  <Input id="invoice_number" name="invoice_number" required autoFocus />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="invoice_date">Invoice date</Label>
+                  <Input id="invoice_date" name="invoice_date" type="date" defaultValue={orderDateDefault} />
+                </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
@@ -226,9 +247,41 @@ export default async function NewOrderPage(props: PageProps<"/dashboard/orders/n
                   autoComplete="off"
                 />
               </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="order_date">Order date</Label>
+                  <Input id="order_date" name="order_date" type="date" defaultValue={orderDateDefault} required />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="return_by_date">Return date</Label>
+                  <Input id="return_by_date" name="return_by_date" type="date" defaultValue={returnByDefault} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="payment_due_date">Payment due date</Label>
+                  <Input
+                    id="payment_due_date"
+                    name="payment_due_date"
+                    type="date"
+                    defaultValue={paymentDueDefault}
+                  />
+                </div>
+              </div>
+              {(supplier.default_return_days == null || supplier.default_payment_due_day == null) && (
+                <p className="text-xs text-muted-foreground">
+                  {supplier.name} has no default return/payment terms set up yet — Return/Payment
+                  due dates are left blank until you set them, either here or under{" "}
+                  <Link
+                    href="/dashboard/settings/suppliers"
+                    className="font-medium underline-offset-4 hover:underline"
+                  >
+                    supplier settings
+                  </Link>
+                  .
+                </p>
+              )}
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="notes">Notes</Label>
-                <Input id="notes" name="notes" placeholder="e.g. expected date" />
+                <Input id="notes" name="notes" />
               </div>
               <div className="flex justify-end">
                 <SubmitButton pendingText="Saving…">Place order</SubmitButton>
