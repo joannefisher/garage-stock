@@ -261,19 +261,20 @@ export async function receiveOrderQuantity(formData: FormData) {
 }
 
 /**
- * Marks an order's invoice as paid — mirrors on-account/actions.ts's
- * markConsignmentLotPaid exactly (same paid_at/paid_by-style pair, just
- * named invoice_paid_at/invoice_paid_by on stock_lots per 0020_supplier_
- * defaults_and_order_dates.sql). Lives on the new "Orders due" report
- * rather than the plain Orders list: an order can be fully received
- * (dropped off that list, which is scoped to outstanding quantity only)
- * while its invoice is still unpaid, so this needs to work regardless of
- * quantity_received — the only requirement is that it's still a
+ * Toggles an order's invoice between paid and unpaid — replaces the old
+ * one-way markOrderInvoicePaid (Sept 2026 follow-up round). The new
+ * Invoices page (../orders/invoices) needs to un-mark a paid invoice as
+ * well as mark one paid ("mark an invoice as paid or unpaid", per
+ * Joanne's request), so this reads the row's current invoice_paid_at
+ * first and flips it, rather than keeping two separate one-directional
+ * actions. Works regardless of quantity_received — an order can be fully
+ * received (dropped off the outstanding Orders list) while its invoice
+ * is still unpaid — the only requirement is that it's still an
  * 'ordered'-status lot (an order never changes status on receipt, see
- * receiveOrderQuantity above) and not already marked paid.
+ * receiveOrderQuantity above).
  */
-export async function markOrderInvoicePaid(formData: FormData) {
-  const redirectTo = safeRedirectTo(formData, "/dashboard/stock/reporting/orders-due")
+export async function toggleOrderInvoicePaid(formData: FormData) {
+  const redirectTo = safeRedirectTo(formData, "/dashboard/orders/invoices")
   const lotId = str(formData, "lot_id")
 
   function fail(message: string): never {
@@ -284,18 +285,32 @@ export async function markOrderInvoicePaid(formData: FormData) {
 
   const staff = await getCurrentStaff()
   if (!staff) redirect("/login")
-  if (!staff.canManageStock) fail("Only admins and managers can mark an invoice as paid.")
+  if (!staff.canManageStock) fail("Only admins and managers can change an invoice's paid status.")
 
   const supabase = await createClient()
+  const { data: order } = await supabase
+    .from("stock_lots")
+    .select("id, invoice_paid_at")
+    .eq("id", lotId)
+    .eq("status", "ordered")
+    .maybeSingle()
+
+  if (!order) fail("That order could not be found.")
+
+  const nowPaid = !order.invoice_paid_at
   const { error } = await supabase
     .from("stock_lots")
-    .update({ invoice_paid_at: new Date().toISOString(), invoice_paid_by: staff.id })
+    .update(
+      nowPaid
+        ? { invoice_paid_at: new Date().toISOString(), invoice_paid_by: staff.id }
+        : { invoice_paid_at: null, invoice_paid_by: null }
+    )
     .eq("id", lotId)
     .eq("status", "ordered")
 
   if (error) {
-    fail(friendlyDbError(error, "Could not mark this invoice as paid."))
+    fail(friendlyDbError(error, "Could not update this invoice's paid status."))
   }
 
-  redirect(withParam(redirectTo, "paid", "1"))
+  redirect(withParam(redirectTo, nowPaid ? "paid" : "unpaid", "1"))
 }

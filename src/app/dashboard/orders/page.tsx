@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { OrdersTable } from "@/components/orders/orders-table"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockLotRow } from "@/types/database.types"
@@ -13,6 +14,13 @@ type OrdersSearchParams = {
   orderedName?: string
   orderedQty?: string
   orderedInvoice?: string
+  /** Set by receiveOrderQuantity when the new ReceiveOrderDialog (Sept
+   * 2026 follow-up round) is used straight from this page — previously
+   * this page could never reach that state, since "Receive" used to
+   * navigate away to Quick Stock Add instead. */
+  received?: string
+  receivedName?: string
+  receivedQty?: string
 }
 
 type OrderRow = StockLotRow & {
@@ -64,6 +72,15 @@ export default async function OrdersPage(props: PageProps<"/dashboard/orders">) 
         .join(" · ")
     : null
 
+  const receivedConfirmation = searchParams.received
+    ? [
+        searchParams.receivedQty ? `+${searchParams.receivedQty}` : null,
+        `${searchParams.received}${searchParams.receivedName ? ` — ${searchParams.receivedName}` : ""}`,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : null
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -73,9 +90,14 @@ export default async function OrdersPage(props: PageProps<"/dashboard/orders">) 
             Orders placed with suppliers that haven&apos;t arrived in full yet.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/orders/new">New order</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href="/dashboard/orders/invoices">Invoices</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/orders/new">New order</Link>
+          </Button>
+        </div>
       </div>
 
       {searchParams.error && (
@@ -90,6 +112,12 @@ export default async function OrdersPage(props: PageProps<"/dashboard/orders">) 
         </p>
       )}
 
+      {receivedConfirmation && (
+        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
+          ✓ Received {receivedConfirmation}
+        </p>
+      )}
+
       {error && <p className="text-sm text-destructive">Couldn&apos;t load orders: {error.message}</p>}
 
       <Card>
@@ -98,94 +126,8 @@ export default async function OrdersPage(props: PageProps<"/dashboard/orders">) 
             {orders.length} outstanding order{orders.length === 1 ? "" : "s"}
           </CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="px-2 py-1.5 font-medium">Invoice #</th>
-                <th className="px-2 py-1.5 font-medium">Order date</th>
-                <th className="px-2 py-1.5 font-medium">Payment due</th>
-                <th className="px-2 py-1.5 font-medium">Supplier</th>
-                <th className="px-2 py-1.5 font-medium">Product</th>
-                <th className="px-2 py-1.5 text-right font-medium">Ordered</th>
-                <th className="px-2 py-1.5 text-right font-medium">Received</th>
-                <th className="px-2 py-1.5 text-right font-medium">Outstanding</th>
-                <th className="px-2 py-1.5 text-right font-medium">Cost exc. VAT</th>
-                <th className="px-2 py-1.5 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((lot) => (
-                <tr key={lot.id} className="border-b last:border-0">
-                  <td className="px-2 py-1.5 font-medium whitespace-nowrap">
-                    {lot.invoice_number ?? "—"}
-                  </td>
-                  <td className="px-2 py-1.5 whitespace-nowrap">
-                    {/* order_date (0020) is only populated for orders placed since this
-                        round — older rows fall back to the automatic ordered_at
-                        timestamp, then created_at, same as before this column existed. */}
-                    {new Date(lot.order_date ?? lot.ordered_at ?? lot.created_at).toLocaleDateString(
-                      "en-GB"
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5 whitespace-nowrap">
-                    {lot.payment_due_date ? (
-                      <span className="flex items-center gap-1.5">
-                        {new Date(lot.payment_due_date).toLocaleDateString("en-GB")}
-                        {lot.invoice_paid_at ? (
-                          <span className="rounded-full bg-green-600/10 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-                            Paid
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-amber-600/10 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-                            Unpaid
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5 text-muted-foreground">{lot.suppliers?.name ?? "—"}</td>
-                  <td className="px-2 py-1.5">
-                    {lot.stock_items ? (
-                      <>
-                        <span className="font-bold">{lot.stock_items.id_number}</span>{" "}
-                        <span className="text-muted-foreground">{lot.stock_items.name}</span>
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5 text-right">{lot.quantity}</td>
-                  <td className="px-2 py-1.5 text-right">{lot.quantity_received}</td>
-                  <td className="px-2 py-1.5 text-right font-medium">
-                    {lot.quantity - lot.quantity_received}
-                  </td>
-                  <td className="px-2 py-1.5 text-right">£{lot.cost_price.toFixed(2)}</td>
-                  <td className="px-2 py-1.5">
-                    {lot.stock_items && (
-                      <Link
-                        href={`/dashboard/stock/receive?id=${encodeURIComponent(
-                          lot.stock_items.id_number
-                        )}&order_lot_id=${encodeURIComponent(lot.id)}`}
-                        className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
-                      >
-                        Receive →
-                      </Link>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {orders.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-2 py-6 text-center text-muted-foreground">
-                    No outstanding orders — everything placed has arrived.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <CardContent>
+          <OrdersTable orders={orders} redirectTo="/dashboard/orders" />
         </CardContent>
       </Card>
     </div>

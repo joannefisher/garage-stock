@@ -63,14 +63,14 @@ export default async function StockReportingPage() {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/dashboard/stock/reporting/orders-due">
+        <Link href="/dashboard/orders/invoices">
           <Card className="h-full transition-opacity hover:opacity-90">
             <CardHeader>
-              <CardTitle>Orders due</CardTitle>
+              <CardTitle>Invoices</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Orders not yet due, or whose invoice isn&apos;t marked paid.
+                Search order invoices by number, supplier or date, and mark them paid or unpaid.
               </p>
             </CardContent>
           </Card>

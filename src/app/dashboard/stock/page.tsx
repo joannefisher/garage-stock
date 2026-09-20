@@ -5,14 +5,20 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 
 // Sept 2026 stock status redesign — the Stock page is now a hub rather
-// than the search-and-list page it used to be: six action entries —
-// Stock Search, Add Order, Receive Stock, Return Stock, Black Circles
-// Stock, Reporting.
+// than the search-and-list page it used to be: originally six action
+// entries — Stock Search, Add Order, Receive Stock, Return Stock, Black
+// Circles Stock, Reporting.
 //   - The search feature + full stock list that used to live here moved
 //     to /dashboard/stock/search unchanged, just relocated (item 3).
 //   - Reorder report and Pending payments moved under the new
 //     /dashboard/stock/reporting hub (item 8) — same reports, same code,
 //     new front door.
+//   - Sept 2026 follow-up round: "Add Order" was removed outright per
+//     Joanne's explicit instruction ("the function exists on the New
+//     Order page" — reachable via the Orders nav item/New order button
+//     instead), and "Reporting" moved to the Overview page (/dashboard)
+//     per her request to move it there — this hub is now four entries:
+//     Stock Search, Receive Stock, Return Stock, Black Circles Stock.
 //   - Sept 2026 Orders round: the four colour-tile metrics that used to
 //     live here (Total items, Stock value, Low stock, Stocktakes this
 //     month) moved to the Overview page (/dashboard) as proper widgets
@@ -59,9 +65,6 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
         {canManageStock && (
           <>
             <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
-              <Link href="/dashboard/orders">Add Order</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
               <Link href="/dashboard/stock/receive-stock">Receive Stock</Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
@@ -69,9 +72,6 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
             </Button>
             <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
               <Link href="/dashboard/stock/black-circle">Black Circles Stock</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
-              <Link href="/dashboard/stock/reporting">Reporting</Link>
             </Button>
           </>
         )}

@@ -3,46 +3,45 @@
 import Link from "next/link"
 import { useMemo, useState } from "react"
 
+import { SubmitButton } from "@/components/ui/submit-button"
 import type { OrdersReportRow } from "@/types/database.types"
 
 type SortKey =
+  | "invoice_number"
+  | "supplier_name"
   | "id_number"
   | "name"
-  | "supplier_name"
-  | "invoice_number"
   | "order_date"
-  | "quantity"
-  | "outstanding"
-  | "cost_price"
-  | "return_by_date"
   | "payment_due_date"
+  | "cost_price"
 type SortDir = "asc" | "desc"
 
 const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
+  { key: "invoice_number", label: "Invoice #" },
+  { key: "supplier_name", label: "Supplier" },
   { key: "id_number", label: "ID" },
   { key: "name", label: "Item" },
-  { key: "supplier_name", label: "Supplier" },
-  { key: "invoice_number", label: "Invoice #" },
   { key: "order_date", label: "Order date" },
-  { key: "quantity", label: "Ordered", numeric: true },
-  { key: "outstanding", label: "Outstanding", numeric: true },
-  { key: "cost_price", label: "Cost exc. VAT", numeric: true },
-  { key: "return_by_date", label: "Return by" },
   { key: "payment_due_date", label: "Payment due" },
+  { key: "cost_price", label: "Cost exc. VAT", numeric: true },
 ]
 
 /**
- * The Orders report table — "all headers sortable" per Joanne's request,
- * same click-to-sort pattern as stock-search-table.tsx (a client
- * component taking the already-filtered rows as a prop and only ever
- * reordering them; OrdersReportFilters above changes which rows are
- * fetched at all). Used by the plain Orders report only — the paid/unpaid
- * toggle that used to live here (for the now-removed Orders Due report)
- * moved to its own InvoicesTable (src/components/orders/invoices-table.tsx)
- * alongside the new Invoices page, since that's the only place money is
- * actually being marked settled now.
+ * Sortable invoices table for the new Invoices page (Sept 2026 follow-up
+ * round) — same click-to-sort pattern as OrdersReportTable, plus a
+ * bidirectional "Mark paid" / "Mark unpaid" toggle button per row via
+ * toggleOrderInvoicePaid, since Joanne asked to be able to "mark an
+ * invoice as paid or unpaid" from this list, not just one-way.
  */
-export function OrdersReportTable({ rows }: { rows: OrdersReportRow[] }) {
+export function InvoicesTable({
+  rows,
+  toggleAction,
+  redirectTo,
+}: {
+  rows: OrdersReportRow[]
+  toggleAction: (formData: FormData) => void
+  redirectTo: string
+}) {
   const [sort, setSort] = useState<SortKey>("order_date")
   const [dir, setDir] = useState<SortDir>("desc")
 
@@ -58,26 +57,20 @@ export function OrdersReportTable({ rows }: { rows: OrdersReportRow[] }) {
   const sorted = useMemo(() => {
     function valueFor(row: OrdersReportRow, key: SortKey): string | number {
       switch (key) {
+        case "invoice_number":
+          return row.invoice_number ?? ""
+        case "supplier_name":
+          return row.supplier_name ?? ""
         case "id_number":
           return row.id_number
         case "name":
           return row.name
-        case "supplier_name":
-          return row.supplier_name ?? ""
-        case "invoice_number":
-          return row.invoice_number ?? ""
         case "order_date":
           return row.order_date ?? row.ordered_at ?? ""
-        case "quantity":
-          return row.quantity
-        case "outstanding":
-          return row.outstanding
-        case "cost_price":
-          return row.cost_price
-        case "return_by_date":
-          return row.return_by_date ?? ""
         case "payment_due_date":
           return row.payment_due_date ?? ""
+        case "cost_price":
+          return row.cost_price
       }
     }
 
@@ -111,6 +104,8 @@ export function OrdersReportTable({ rows }: { rows: OrdersReportRow[] }) {
                 </button>
               </th>
             ))}
+            <th className="px-4 py-3.5 font-bold">Status</th>
+            <th className="px-4 py-3.5 font-bold">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -119,6 +114,8 @@ export function OrdersReportTable({ rows }: { rows: OrdersReportRow[] }) {
               key={row.lot_id}
               className={`border-b last:border-0 hover:bg-accent/50 ${i % 2 === 1 ? "bg-muted/40" : ""}`}
             >
+              <td className="px-4 py-3.5 font-medium">{row.invoice_number ?? "—"}</td>
+              <td className="px-4 py-3.5 text-muted-foreground">{row.supplier_name ?? "—"}</td>
               <td className="px-4 py-3.5">
                 <Link
                   href={`/dashboard/stock/${row.stock_item_id}`}
@@ -128,46 +125,40 @@ export function OrdersReportTable({ rows }: { rows: OrdersReportRow[] }) {
                 </Link>
               </td>
               <td className="px-4 py-3.5 font-semibold">{row.name}</td>
-              <td className="px-4 py-3.5 text-muted-foreground">{row.supplier_name ?? "—"}</td>
-              <td className="px-4 py-3.5 text-muted-foreground">{row.invoice_number ?? "—"}</td>
               <td className="px-4 py-3.5 whitespace-nowrap">
                 {row.order_date || row.ordered_at
                   ? new Date(row.order_date ?? row.ordered_at!).toLocaleDateString("en-GB")
                   : "—"}
               </td>
-              <td className="px-4 py-3.5 text-right">{row.quantity}</td>
-              <td className="px-4 py-3.5 text-right font-semibold">{row.outstanding}</td>
-              <td className="px-4 py-3.5 text-right">£{row.cost_price.toFixed(2)}</td>
               <td className="px-4 py-3.5 whitespace-nowrap">
-                {row.return_by_date ? new Date(row.return_by_date).toLocaleDateString("en-GB") : "—"}
+                {row.payment_due_date ? new Date(row.payment_due_date).toLocaleDateString("en-GB") : "—"}
               </td>
-              <td className="px-4 py-3.5 whitespace-nowrap">
-                {row.payment_due_date ? (
-                  <span className="flex items-center gap-1.5">
-                    {new Date(row.payment_due_date).toLocaleDateString("en-GB")}
-                    {row.invoice_paid_at ? (
-                      <span className="rounded-full bg-green-600/10 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-                        Paid
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-amber-600/10 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-                        Unpaid
-                      </span>
-                    )}
-                  </span>
-                ) : row.invoice_paid_at ? (
-                  <span className="rounded-full bg-green-600/10 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-                    Paid
+              <td className="px-4 py-3.5 text-right">£{row.cost_price.toFixed(2)}</td>
+              <td className="px-4 py-3.5">
+                {row.invoice_paid_at ? (
+                  <span className="rounded-full bg-green-600/10 px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-green-700 dark:text-green-400">
+                    Paid {new Date(row.invoice_paid_at).toLocaleDateString("en-GB")}
                   </span>
                 ) : (
-                  "—"
+                  <span className="rounded-full bg-amber-600/10 px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-amber-700 dark:text-amber-400">
+                    Unpaid
+                  </span>
                 )}
+              </td>
+              <td className="px-4 py-3.5">
+                <form action={toggleAction}>
+                  <input type="hidden" name="lot_id" value={row.lot_id} />
+                  <input type="hidden" name="redirect_to" value={redirectTo} />
+                  <SubmitButton size="sm" variant="outline" pendingText="Saving…">
+                    {row.invoice_paid_at ? "Mark unpaid" : "Mark paid"}
+                  </SubmitButton>
+                </form>
               </td>
             </tr>
           ))}
           {sorted.length === 0 && (
             <tr>
-              <td colSpan={COLUMNS.length} className="px-4 py-8 text-center text-muted-foreground">
+              <td colSpan={COLUMNS.length + 2} className="px-4 py-8 text-center text-muted-foreground">
                 Nothing to show.
               </td>
             </tr>

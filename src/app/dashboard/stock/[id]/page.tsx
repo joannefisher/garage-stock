@@ -111,6 +111,12 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
   // 'committed' once it's actually owed (see on-account/receive/
   // actions.ts), so "committed and unpaid" is exactly "owed right now".
   const owesOnAccountPayment = lots.some((lot) => lot.status === "committed" && !lot.paid_at)
+  // "Ordered QTY" (Sept 2026 follow-up round) — outstanding quantity
+  // across this item's own 'ordered' stock_lots rows, same "not yet
+  // received in full" arithmetic as ../../orders/page.tsx.
+  const orderedQty = stockLots
+    .filter((lot) => lot.status === "ordered")
+    .reduce((sum, lot) => sum + (lot.quantity - lot.quantity_received), 0)
 
   return (
     <div className="flex flex-col gap-4">
@@ -171,6 +177,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
           <CardContent className="flex flex-col gap-1.5 text-sm">
             <Row label="Supplier" value={stockItem.suppliers?.name ?? "—"} />
             <Row label="On hand" value={String(stockItem.quantity_on_hand)} />
+            <Row label="Ordered QTY" value={String(orderedQty)} />
             <Row label="Ideal level" value={String(stockItem.ideal_stock_level)} />
             {canManageStock && (
               <>

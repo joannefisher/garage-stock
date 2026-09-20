@@ -36,6 +36,20 @@ const QUICK_LINKS = [
   },
 ]
 
+// Reporting quick link (Sept 2026 follow-up round) — moved here from the
+// Stock hub per Joanne's explicit request ("Move reporting button from
+// Stock to Overview"). Admin/manager only, same as the hub button it
+// replaces — a mechanic has nothing to do on any of those report pages.
+const REPORTING_LINK = {
+  href: "/dashboard/stock/reporting",
+  label: "Reporting",
+  description: "Reorder, orders, invoices, returnable stock, and pending payments.",
+  tone: "violet" as const,
+  icon: (
+    <path d="M4 19V9 M10 19V5 M16 19v-7 M4 19h16" />
+  ),
+}
+
 const TONE_CLASSES = {
   primary: "bg-primary text-primary-foreground",
   violet: "bg-violet text-violet-foreground",
@@ -159,7 +173,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {QUICK_LINKS.map((link) => (
+        {[...QUICK_LINKS, ...(canManageStock ? [REPORTING_LINK] : [])].map((link) => (
           <Link
             key={link.href}
             href={link.href}

@@ -6,12 +6,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SubmitButton } from "@/components/ui/submit-button"
 import { ScannableIdInput } from "@/components/scan/scannable-id-input"
+import { ReceiveOrderDialog } from "@/components/orders/receive-order-dialog"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
 import type { StockLotRow } from "@/types/database.types"
 
 import { receiveStock } from "./actions"
-import { receiveOrderQuantity } from "../../orders/actions"
 
 type ReceiveStockSearchParams = {
   error?: string
@@ -34,6 +34,7 @@ export default async function ReceiveStockPage(
   props: PageProps<"/dashboard/stock/receive">
 ) {
   const searchParams = (await props.searchParams) as ReceiveStockSearchParams
+  const filterIdOrBarcode = (searchParams.value ?? searchParams.id ?? "").trim()
 
   const staff = await getCurrentStaff()
   if (!staff?.canManageStock) {
@@ -44,16 +45,33 @@ export default async function ReceiveStockPage(
     )
   }
 
-  // Open orders section (Sept 2026 Orders round) — "display all existing
-  // orders ... to allow a quick acceptance of stock ... allow all or part
-  // of this order to be accepted", per Joanne's request. Same "not yet
-  // received in full" in-memory filter as ../../orders/page.tsx.
+  // Open orders section (Sept 2026 Orders round; filtering added in the
+  // Sept 2026 follow-up round) — "display all existing orders ... to
+  // allow a quick acceptance of stock ... allow all or part of this
+  // order to be accepted", per Joanne's request. Same "not yet received
+  // in full" in-memory filter as ../../orders/page.tsx. When this page
+  // is reached from the Receive Stock barcode lookup (?id=...), per her
+  // explicit instruction the list here is filtered down to just that
+  // product's own open orders rather than every open order in the
+  // system — the plain "Save and scan next" Quick Add form below still
+  // works against any product regardless of this filter.
   const supabase = await createClient()
-  const { data: openOrdersData } = await supabase
+  let ordersQuery = supabase
     .from("stock_lots")
     .select("*, stock_items(id_number, name), suppliers(name)")
     .eq("status", "ordered")
     .order("ordered_at", { ascending: true })
+  if (filterIdOrBarcode) {
+    const { data: filterItem } = await supabase
+      .from("stock_items")
+      .select("id")
+      .ilike("id_number", filterIdOrBarcode)
+      .maybeSingle()
+    if (filterItem) {
+      ordersQuery = ordersQuery.eq("stock_item_id", filterItem.id)
+    }
+  }
+  const { data: openOrdersData } = await ordersQuery
   const openOrders = ((openOrdersData ?? []) as unknown as OpenOrderRow[]).filter(
     (lot) => lot.quantity_received < lot.quantity
   )
@@ -102,6 +120,90 @@ export default async function ReceiveStockPage(
           ✓ Updated {confirmation}
         </p>
       )}
+
+      {/* Open orders comes first (Sept 2026 follow-up round, per Joanne's
+          explicit instruction — "Quick Add should be below the Order
+          list as most of the time the order will already exist"). */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Open orders ({openOrders.length} outstanding)
+            {filterIdOrBarcode ? ` for "${filterIdOrBarcode}"` : ""} ·{" "}
+            <Link href="/dashboard/orders" className="text-sm font-normal underline-offset-4 hover:underline">
+              view all
+            </Link>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <p className="mb-3 text-sm text-muted-foreground">
+            {filterIdOrBarcode
+              ? "Only open orders for this product are shown — accept all or part of one directly."
+              : "Accept all or part of an order directly — this links the stock received straight back to it, the same as matching by invoice number below."}
+          </p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="px-2 py-1.5 font-medium">Invoice #</th>
+                <th className="px-2 py-1.5 font-medium">Date</th>
+                <th className="px-2 py-1.5 font-medium">Supplier</th>
+                <th className="px-2 py-1.5 font-medium">Product</th>
+                <th className="px-2 py-1.5 text-right font-medium">Outstanding</th>
+                <th className="px-2 py-1.5 font-medium">Accept</th>
+              </tr>
+            </thead>
+            <tbody>
+              {openOrders.map((lot) => {
+                const highlighted = searchParams.order_lot_id === lot.id
+                return (
+                  <tr
+                    key={lot.id}
+                    className={`border-b last:border-0 ${highlighted ? "bg-primary/10" : ""}`}
+                  >
+                    <td className="px-2 py-1.5 font-medium whitespace-nowrap">
+                      {lot.invoice_number ?? "—"}
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {new Date(lot.ordered_at ?? lot.created_at).toLocaleDateString("en-GB")}
+                    </td>
+                    <td className="px-2 py-1.5 text-muted-foreground">{lot.suppliers?.name ?? "—"}</td>
+                    <td className="px-2 py-1.5">
+                      {lot.stock_items ? (
+                        <>
+                          <span className="font-bold">{lot.stock_items.id_number}</span>{" "}
+                          <span className="text-muted-foreground">{lot.stock_items.name}</span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">{lot.quantity - lot.quantity_received}</td>
+                    <td className="px-2 py-1.5">
+                      <ReceiveOrderDialog
+                        order={{
+                          id: lot.id,
+                          invoice_number: lot.invoice_number,
+                          quantity: lot.quantity,
+                          quantity_received: lot.quantity_received,
+                          id_number: lot.stock_items?.id_number,
+                          name: lot.stock_items?.name,
+                        }}
+                        redirectTo="/dashboard/stock/receive"
+                      />
+                    </td>
+                  </tr>
+                )
+              })}
+              {openOrders.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">
+                    No outstanding orders{filterIdOrBarcode ? " for this product" : ""}.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -171,95 +273,10 @@ export default async function ReceiveStockPage(
               Leave quantity at 0 to only update the cost price, e.g. if a supplier has changed
               their price but nothing new has arrived yet. If the invoice number matches an open
               order for this product, it&apos;s linked to that order automatically — no need to
-              pick it below as well.
+              pick it above as well.
             </p>
             <SubmitButton pendingText="Saving…">Save and scan next</SubmitButton>
           </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Open orders ({openOrders.length} outstanding) ·{" "}
-            <Link href="/dashboard/orders" className="text-sm font-normal underline-offset-4 hover:underline">
-              view all
-            </Link>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <p className="mb-3 text-sm text-muted-foreground">
-            Accept all or part of an order directly — this links the stock received straight back
-            to it, the same as matching by invoice number above.
-          </p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="px-2 py-1.5 font-medium">Invoice #</th>
-                <th className="px-2 py-1.5 font-medium">Date</th>
-                <th className="px-2 py-1.5 font-medium">Supplier</th>
-                <th className="px-2 py-1.5 font-medium">Product</th>
-                <th className="px-2 py-1.5 text-right font-medium">Outstanding</th>
-                <th className="px-2 py-1.5 font-medium">Accept</th>
-              </tr>
-            </thead>
-            <tbody>
-              {openOrders.map((lot) => {
-                const outstanding = lot.quantity - lot.quantity_received
-                const highlighted = searchParams.order_lot_id === lot.id
-                return (
-                  <tr
-                    key={lot.id}
-                    className={`border-b last:border-0 ${highlighted ? "bg-primary/10" : ""}`}
-                  >
-                    <td className="px-2 py-1.5 font-medium whitespace-nowrap">
-                      {lot.invoice_number ?? "—"}
-                    </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
-                      {new Date(lot.ordered_at ?? lot.created_at).toLocaleDateString("en-GB")}
-                    </td>
-                    <td className="px-2 py-1.5 text-muted-foreground">{lot.suppliers?.name ?? "—"}</td>
-                    <td className="px-2 py-1.5">
-                      {lot.stock_items ? (
-                        <>
-                          <span className="font-bold">{lot.stock_items.id_number}</span>{" "}
-                          <span className="text-muted-foreground">{lot.stock_items.name}</span>
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-right">{outstanding}</td>
-                    <td className="px-2 py-1.5">
-                      <form action={receiveOrderQuantity} className="flex items-center gap-1.5">
-                        <input type="hidden" name="order_lot_id" value={lot.id} />
-                        <input type="hidden" name="redirect_to" value="/dashboard/stock/receive" />
-                        <Input
-                          name="quantity"
-                          type="number"
-                          min="1"
-                          max={outstanding}
-                          defaultValue={outstanding}
-                          className="w-20"
-                          aria-label="Quantity to accept"
-                        />
-                        <SubmitButton size="sm" variant="outline" pendingText="Accepting…">
-                          Accept
-                        </SubmitButton>
-                      </form>
-                    </td>
-                  </tr>
-                )
-              })}
-              {openOrders.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">
-                    No outstanding orders.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </CardContent>
       </Card>
     </div>

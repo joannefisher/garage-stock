@@ -140,6 +140,7 @@ export default async function ReceiveStockLookupPage(
                   <th className="px-2 py-1.5 font-medium">Supplier</th>
                   <th className="px-2 py-1.5 text-right font-medium">Cost exc. VAT</th>
                   <th className="px-2 py-1.5 text-right font-medium">Cost inc. VAT</th>
+                  <th className="px-2 py-1.5 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,6 +177,16 @@ export default async function ReceiveStockLookupPage(
                       <td className="px-2 py-1.5 text-right">£{item.cost_price.toFixed(2)}</td>
                       <td className="px-2 py-1.5 text-right">
                         {incVat != null ? `£${incVat.toFixed(2)}` : "—"}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {!item.is_black_circle && !item.is_consignment && (
+                          <Link
+                            href={`/dashboard/stock/receive?id=${encodeURIComponent(item.id_number)}`}
+                            className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
+                          >
+                            Receive Stock →
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   )

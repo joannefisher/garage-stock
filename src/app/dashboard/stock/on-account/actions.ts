@@ -116,6 +116,104 @@ export async function returnConsignmentLot(formData: FormData) {
 }
 
 /**
+ * Returns a QUANTITY of on-account stock to its supplier — the on-account
+ * counterpart to return-stock/actions.ts:returnOwnedStockQuantity, for
+ * the same redesigned Return Stock screen (Sept 2026 follow-up round).
+ * Unlike owned stock_lots, consignment_stock_lots has no per-lot
+ * supplier_id — a product's on-account stock always has exactly one
+ * supplier, the product's own stock_items.supplier_id — so this only
+ * ever needs to group and consume by stock_item_id, not by supplier as
+ * well.
+ *
+ * Consumes committed/unpaid lots FIFO by received_at (oldest first),
+ * same convention as the owned-stock version. A lot fully consumed by
+ * the return flips to 'returned' (returned_at/by set), exactly like the
+ * existing single-lot returnConsignmentLot above — that preserves this
+ * table's established "keep a returned history row" behaviour, unlike
+ * owned stock_lots' delete-on-return. A lot only partially consumed has
+ * its quantity decremented in place and stays 'committed' — new
+ * behaviour this round, same reasoning as the owned-stock version's
+ * comment.
+ */
+export async function returnConsignmentStockQuantity(formData: FormData) {
+  const redirectTo = safeRedirectTo(formData)
+  const stockItemId = str(formData, "stock_item_id")
+  const quantityStr = str(formData, "quantity")
+
+  function fail(message: string): never {
+    redirect(withParam(redirectTo, "error", message))
+  }
+
+  const quantity = Number(quantityStr)
+  if (!stockItemId) fail("That on-account item could not be found.")
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    fail("Enter a quantity of at least 1 to return.")
+  }
+
+  const staff = await getCurrentStaff()
+  if (!staff) redirect("/login")
+  if (!staff.canManageStock) fail("Only admins and managers can return on-account stock.")
+
+  const supabase = await createClient()
+  const { data: lotsData } = await supabase
+    .from("consignment_stock_lots")
+    .select("id, quantity")
+    .eq("stock_item_id", stockItemId)
+    .eq("status", "committed")
+    .is("paid_at", null)
+    .order("received_at", { ascending: true })
+  const lots = lotsData ?? []
+
+  const totalOnHand = lots.reduce((sum, lot) => sum + lot.quantity, 0)
+  if (quantity > totalOnHand) {
+    fail(`Can't return more than what's on hand on account (${totalOnHand}).`)
+  }
+
+  const returnedAt = new Date().toISOString()
+  let remaining = quantity
+  for (const lot of lots) {
+    if (remaining <= 0) break
+    const takeFromLot = Math.min(remaining, lot.quantity)
+
+    const { error: movementError } = await supabase.from("stock_movements").insert({
+      stock_item_id: stockItemId,
+      movement_type: "return_to_supplier",
+      quantity: -takeFromLot,
+      consignment_lot_id: lot.id,
+      performed_by: staff.id,
+      notes: "On-account stock returned unused",
+    })
+    if (movementError) {
+      fail(friendlyDbError(movementError, "Could not record the return."))
+    }
+
+    if (takeFromLot >= lot.quantity) {
+      const { error: lotError } = await supabase
+        .from("consignment_stock_lots")
+        .update({ status: "returned", returned_at: returnedAt, returned_by: staff.id })
+        .eq("id", lot.id)
+        .eq("status", "committed")
+      if (lotError) {
+        fail(friendlyDbError(lotError, "Recorded part of the return but could not mark a lot as returned."))
+      }
+    } else {
+      const { error: lotError } = await supabase
+        .from("consignment_stock_lots")
+        .update({ quantity: lot.quantity - takeFromLot })
+        .eq("id", lot.id)
+        .eq("status", "committed")
+      if (lotError) {
+        fail(friendlyDbError(lotError, "Recorded part of the return but could not update the remaining lot."))
+      }
+    }
+
+    remaining -= takeFromLot
+  }
+
+  redirect(withParam(redirectTo, "returned", "1"))
+}
+
+/**
  * Marks a committed lot's payment as settled — the only way a lot leaves
  * the pending-payments report (0012_consignment_lot_payment.sql). Only
  * valid for a lot that's actually committed; a check constraint on the

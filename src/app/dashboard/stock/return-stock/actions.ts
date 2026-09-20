@@ -100,3 +100,113 @@ export async function returnStockLot(formData: FormData) {
 
   redirect(withParam(redirectTo, "returned", "1"))
 }
+
+/**
+ * Returns a QUANTITY of owned stock to a supplier — the redesigned
+ * Return Stock screen (Sept 2026 follow-up round). Per Joanne's explicit
+ * request, this screen no longer shows individual batches/lots to return
+ * one at a time: "I only want to return a QTY. So I should see the
+ * Supplier and the QTY I have on hand ... and then I can enter a QTY to
+ * return." Owned lots snapshot their own supplier_id per batch (a
+ * product can be ordered from different suppliers over time — 0019), so
+ * "owned stock for this supplier" can span more than one lot; this
+ * consumes them FIFO by received_at (oldest first, same ordering the
+ * page displays them in and the same convention receiveStock's invoice
+ * auto-match already uses elsewhere), reducing each lot in turn.
+ *
+ * A lot that's fully consumed by the return is deleted outright, exactly
+ * like the single-lot returnStockLot above (Joanne's explicit choice,
+ * see that function's comment) — a lot only partially consumed has its
+ * quantity decremented in place instead, which is new behaviour this
+ * round: until now a stock_lots row's quantity never changed after
+ * receipt. Each lot touched gets its own stock_movements row (append-only
+ * history, one per batch actually adjusted) rather than a single combined
+ * entry, so the ledger still traces back to which specific batch(es) a
+ * return came out of.
+ *
+ * Requested quantity is re-validated against the database total at
+ * submit time (not trusted from whatever the page last rendered), since
+ * stock could have moved between page load and submit.
+ */
+export async function returnOwnedStockQuantity(formData: FormData) {
+  const redirectTo = safeRedirectTo(formData)
+  const stockItemId = str(formData, "stock_item_id")
+  const supplierId = str(formData, "supplier_id") || null
+  const quantityStr = str(formData, "quantity")
+
+  function fail(message: string): never {
+    redirect(withParam(redirectTo, "error", message))
+  }
+
+  const quantity = Number(quantityStr)
+  if (!stockItemId) fail("That stock item could not be found.")
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    fail("Enter a quantity of at least 1 to return.")
+  }
+
+  const staff = await getCurrentStaff()
+  if (!staff) redirect("/login")
+  if (!staff.canManageStock) fail("Only admins and managers can return stock.")
+
+  const supabase = await createClient()
+  let lotsQuery = supabase
+    .from("stock_lots")
+    .select("id, quantity")
+    .eq("stock_item_id", stockItemId)
+    .eq("status", "owned")
+  lotsQuery = supplierId ? lotsQuery.eq("supplier_id", supplierId) : lotsQuery.is("supplier_id", null)
+  const { data: lotsData } = await lotsQuery.order("received_at", { ascending: true })
+  const lots = lotsData ?? []
+
+  const totalOnHand = lots.reduce((sum, lot) => sum + lot.quantity, 0)
+  if (quantity > totalOnHand) {
+    fail(`Can't return more than what's on hand for this supplier (${totalOnHand}).`)
+  }
+
+  let remaining = quantity
+  for (const lot of lots) {
+    if (remaining <= 0) break
+    const takeFromLot = Math.min(remaining, lot.quantity)
+
+    const { error: movementError } = await supabase.from("stock_movements").insert({
+      stock_item_id: stockItemId,
+      movement_type: "return_to_supplier",
+      quantity: -takeFromLot,
+      stock_lot_id: lot.id,
+      performed_by: staff.id,
+      notes: "Stock returned to supplier",
+    })
+    if (movementError) {
+      fail(friendlyDbError(movementError, "Could not record the return."))
+    }
+
+    if (takeFromLot >= lot.quantity) {
+      const { error: deleteError } = await supabase
+        .from("stock_lots")
+        .delete()
+        .eq("id", lot.id)
+        .eq("status", "owned")
+      if (deleteError) {
+        fail(
+          friendlyDbError(
+            deleteError,
+            "Recorded part of the return but could not remove a fully-returned lot — check the stock file before retrying."
+          )
+        )
+      }
+    } else {
+      const { error: updateError } = await supabase
+        .from("stock_lots")
+        .update({ quantity: lot.quantity - takeFromLot })
+        .eq("id", lot.id)
+        .eq("status", "owned")
+      if (updateError) {
+        fail(friendlyDbError(updateError, "Recorded part of the return but could not update the remaining lot."))
+      }
+    }
+
+    remaining -= takeFromLot
+  }
+
+  redirect(withParam(redirectTo, "returned", "1"))
+}
