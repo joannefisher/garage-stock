@@ -20,11 +20,19 @@ export function BarcodeLookupForm({
   action,
   defaultValue,
   placeholder,
+  extraParams,
 }: {
   /** Page to navigate to, with `?code=<value>` appended. */
   action: string
   defaultValue?: string
   placeholder?: string
+  /**
+   * Extra query params carried alongside `code`, e.g. `{ supplier_id }` for
+   * the supplier-scoped product search in the new Add Order journey (Sept
+   * 2026 Orders round) — that flow needs the chosen supplier to survive
+   * the search just like `code` does.
+   */
+  extraParams?: Record<string, string>
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -33,7 +41,8 @@ export function BarcodeLookupForm({
     const trimmed = code.trim()
     if (!trimmed) return
     startTransition(() => {
-      router.push(`${action}?code=${encodeURIComponent(trimmed)}`)
+      const params = new URLSearchParams({ ...extraParams, code: trimmed })
+      router.push(`${action}?${params.toString()}`)
     })
   }
 

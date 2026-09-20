@@ -14,6 +14,15 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
   // (/dashboard/stock/receive-stock) — a scanned code that didn't match
   // an existing product lands here with it pre-typed.
   const idNumber = typeof searchParams.id_number === "string" ? searchParams.id_number : undefined
+  // Prefilled (not locked) when arriving from the Add Order flow's
+  // "create the product under this supplier" step (Sept 2026 Orders
+  // round) — see stock-item-form.tsx's defaultSupplierId comment.
+  const supplierId = typeof searchParams.supplier_id === "string" ? searchParams.supplier_id : undefined
+  // Where to send the user back to after saving — the Add Order flow
+  // passes its own Step C URL here so creating a product mid-order
+  // doesn't strand the user back on the plain Stock page. See
+  // new/actions.ts's safeRedirectTo/withParam.
+  const redirectTo = typeof searchParams.redirect_to === "string" ? searchParams.redirect_to : undefined
 
   const staff = await getCurrentStaff()
   if (!staff?.canManageStock) {
@@ -55,6 +64,8 @@ export default async function NewStockItemPage(props: PageProps<"/dashboard/stoc
             action={createStockItem}
             error={error}
             defaultIdNumber={idNumber}
+            defaultSupplierId={supplierId}
+            redirectTo={redirectTo}
           />
         </CardContent>
       </Card>

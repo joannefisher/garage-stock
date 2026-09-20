@@ -387,13 +387,22 @@ export type BlackCircleStockLotInsert = {
 export type BlackCircleStockLotUpdate = Partial<BlackCircleStockLotInsert>
 
 // ---------------------------------------------------------------------
-// stock_lots (0018_stock_lots_and_status.sql)
+// stock_lots (0018_stock_lots_and_status.sql, extended by
+// 0019_stock_orders_invoice_and_receiving.sql)
 // ---------------------------------------------------------------------
 // The new generic Ordered/Owned/On Account/Returned batch tracking used
 // by the redesigned Stock hub (Add Order, Receive Stock, Return Stock) —
-// see that migration's header for the full design. consignment_stock_lots
+// see 0018's header for the full design. consignment_stock_lots
 // and black_circle_stock_lots keep their own separate lifecycle and
 // screens, untouched by this table.
+//
+// 0019 added the Orders journey's invoice/receiving fields: invoice_number
+// (required by the app on an 'ordered' lot, optional on an 'owned' one),
+// supplier_id (a point-in-time snapshot, not the product's live supplier),
+// quantity_received (bookkeeping for partial receipt against an 'ordered'
+// lot — see 0019's header for the "not yet received in full" convention),
+// and order_lot_id (self-reference from an 'owned' lot back to the
+// 'ordered' lot it fulfilled — see that migration's header).
 
 export type StockLotRow = {
   id: string
@@ -409,6 +418,10 @@ export type StockLotRow = {
   created_by: string | null
   created_at: string
   updated_at: string
+  invoice_number: string | null
+  supplier_id: string | null
+  quantity_received: number
+  order_lot_id: string | null
 }
 export type StockLotInsert = {
   id?: string
@@ -424,6 +437,10 @@ export type StockLotInsert = {
   created_by?: string | null
   created_at?: string
   updated_at?: string
+  invoice_number?: string | null
+  supplier_id?: string | null
+  quantity_received?: number
+  order_lot_id?: string | null
 }
 export type StockLotUpdate = Partial<StockLotInsert>
 

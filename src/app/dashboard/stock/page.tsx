@@ -94,7 +94,7 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
         {canManageStock && (
           <>
             <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
-              <Link href="/dashboard/stock/add-order">Add Order</Link>
+              <Link href="/dashboard/orders">Add Order</Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="h-auto justify-start py-4">
               <Link href="/dashboard/stock/receive-stock">Receive Stock</Link>
@@ -119,7 +119,7 @@ export default async function StockPage(props: PageProps<"/dashboard/stock">) {
             Add product
           </Link>
           <Link href="/dashboard/stock/receive" className="underline-offset-4 hover:underline">
-            Receive stock (direct)
+            Quick Stock Add (direct)
           </Link>
           <Link
             href="/dashboard/stock/on-account/receive"

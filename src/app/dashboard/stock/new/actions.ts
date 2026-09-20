@@ -22,6 +22,22 @@ function num(formData: FormData, key: string, fallback = 0): number {
   return value === "" || Number.isNaN(parsed) ? fallback : parsed
 }
 
+// Same "trust nothing but a /dashboard/ prefix" pattern already used by
+// on-account/return-stock/black-circle's own safeRedirectTo helpers — kept
+// as a local duplicate rather than a shared utility per this project's
+// established convention. Used by the new Add Order flow (Sept 2026) to
+// return to Step C after creating a product mid-order; null (rather than a
+// same-page fallback) when absent, since the ordinary "Add product" screen
+// has no redirect target of its own — it just keeps going to /dashboard/stock.
+function safeRedirectTo(formData: FormData): string | null {
+  const value = str(formData, "redirect_to")
+  return value.startsWith("/dashboard/") ? value : null
+}
+
+function withParam(path: string, key: string, value: string): string {
+  return `${path}${path.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(value)}`
+}
+
 export async function createStockItem(formData: FormData) {
   const supabase = await createClient()
 
@@ -175,6 +191,16 @@ export async function createStockItem(formData: FormData) {
         friendlyDbError(lotAndMovementResult.error)
       )}`
     )
+  }
+
+  // Mid-order-flow product creation (Sept 2026 Orders round) lands back on
+  // Step C of Add Order with `id` set to whatever id_number was actually
+  // saved — not the originally scanned code, in case the user edited it —
+  // so createStockOrder looks the product up fresh rather than trusting a
+  // stale value. Ordinary "Add product" use (no redirect_to) is unchanged.
+  const redirectTo = safeRedirectTo(formData)
+  if (redirectTo) {
+    redirect(withParam(redirectTo, "id", str(formData, "id_number")))
   }
 
   redirect("/dashboard/stock")

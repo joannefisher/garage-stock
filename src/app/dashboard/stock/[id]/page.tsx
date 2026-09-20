@@ -539,7 +539,13 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
             {canManageStock && (
               <div className="flex gap-2">
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/dashboard/stock/add-order?value=${encodeURIComponent(stockItem.id_number)}`}>
+                  <Link
+                    href={`/dashboard/orders/new?id=${encodeURIComponent(stockItem.id_number)}${
+                      stockItem.supplier_id
+                        ? `&supplier_id=${encodeURIComponent(stockItem.supplier_id)}`
+                        : ""
+                    }`}
+                  >
                     Add order
                   </Link>
                 </Button>
@@ -561,6 +567,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="px-2 py-1.5 font-medium">Status</th>
+                  <th className="px-2 py-1.5 font-medium">Invoice #</th>
                   <th className="px-2 py-1.5 font-medium">Date</th>
                   <th className="px-2 py-1.5 text-right font-medium">Qty</th>
                   <th className="px-2 py-1.5 text-right font-medium">Cost exc. VAT</th>
@@ -575,7 +582,13 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
                       <Badge variant="outline" className="normal-case">
                         {lot.status.replace("_", " ")}
                       </Badge>
+                      {lot.status === "ordered" && lot.quantity_received > 0 && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          ({lot.quantity_received}/{lot.quantity} received)
+                        </span>
+                      )}
                     </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{lot.invoice_number ?? "—"}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
                       {new Date(lot.status === "ordered" ? lot.ordered_at ?? lot.created_at : lot.received_at).toLocaleDateString(
                         "en-GB"

@@ -17,6 +17,13 @@ const NAV_LINKS = [
 // appended conditionally rather than living in the static NAV_LINKS list.
 const SETTINGS_LINK = { href: "/dashboard/settings", label: "Settings" } as const
 
+// Orders (Sept 2026 Orders/invoice-matching round) — a new top-level nav
+// destination per Joanne's explicit choice when asked ("New top-level nav
+// item"), not just a reshuffle inside the Stock hub. Gated the same way as
+// Settings: placing/receiving an order is admin/manager-only throughout
+// this flow, so there's nothing for a mechanic or other staff to do here.
+const ORDERS_LINK = { href: "/dashboard/orders", label: "Orders" } as const
+
 // Mechanics get one link, not the full nav (Sept 2026, per Joanne: "a
 // single UI with Jobs page only ... designed for phone/tablet"). See
 // dashboard/jobs/mechanic/page.tsx for the screen itself, and the
@@ -42,7 +49,13 @@ export function SiteNav({
   isMechanic?: boolean
 }) {
   const pathname = usePathname()
-  const links = isMechanic ? MECHANIC_LINKS : canManageStock ? [...NAV_LINKS, SETTINGS_LINK] : NAV_LINKS
+  // Orders slots in right after Stock (per Joanne's request to add it "to
+  // the top menu" alongside the existing sections), Settings stays last.
+  const links = isMechanic
+    ? MECHANIC_LINKS
+    : canManageStock
+      ? [NAV_LINKS[0], NAV_LINKS[1], ORDERS_LINK, ...NAV_LINKS.slice(2), SETTINGS_LINK]
+      : NAV_LINKS
 
   return (
     <nav className={cn("flex items-center gap-1", className)}>

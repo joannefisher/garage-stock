@@ -191,7 +191,7 @@ export default async function ReceiveStockLookupPage(
                             href={`/dashboard/stock/receive?id=${encodeURIComponent(item.id_number)}`}
                             className="font-medium whitespace-nowrap underline-offset-4 hover:underline"
                           >
-                            Add stock to this product →
+                            Quick Stock Add →
                           </Link>
                         )}
                       </td>

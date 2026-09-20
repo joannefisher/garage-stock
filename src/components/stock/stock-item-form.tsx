@@ -20,6 +20,8 @@ export function StockItemForm({
   action,
   error,
   defaultIdNumber,
+  defaultSupplierId,
+  redirectTo,
 }: {
   suppliers: SupplierOption[]
   action: (formData: FormData) => void
@@ -31,6 +33,22 @@ export function StockItemForm({
    * on file. Still editable — just saves retyping it.
    */
   defaultIdNumber?: string
+  /**
+   * Prefills (not locks — still editable) the supplier dropdown. Used by
+   * the new Add Order journey's "create the product under this supplier"
+   * step (Sept 2026 Orders round) — the order flow re-reads whatever
+   * supplier the saved product actually ends up with rather than trusting
+   * this, so changing it here doesn't break anything downstream.
+   */
+  defaultSupplierId?: string
+  /**
+   * Where to send the user after a successful save, via a hidden
+   * `redirect_to` field the action reads (see new/actions.ts's
+   * safeRedirectTo) — same pattern already used by the on-account/
+   * return-stock/black-circle actions. Used to return to the Add Order
+   * flow (step C) once a product created mid-order-flow is saved.
+   */
+  redirectTo?: string
 }) {
   const [itemType, setItemType] = useState<"part" | "tyre">("part")
   // Black Circle tyres are never owned or charged for (0016_black_circle_
@@ -41,6 +59,8 @@ export function StockItemForm({
 
   return (
     <form action={action} className="flex flex-col gap-6">
+      {redirectTo && <input type="hidden" name="redirect_to" value={redirectTo} />}
+
       {error && (
         <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
@@ -87,7 +107,12 @@ export function StockItemForm({
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="supplier_id">Supplier</Label>
-          <select id="supplier_id" name="supplier_id" className={selectClass}>
+          <select
+            id="supplier_id"
+            name="supplier_id"
+            defaultValue={defaultSupplierId ?? ""}
+            className={selectClass}
+          >
             <option value="">— none —</option>
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
