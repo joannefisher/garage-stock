@@ -162,7 +162,6 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
               id="tyre_width"
               name="tyre_width"
               inputMode="numeric"
-              placeholder="205"
               defaultValue={searchParams.get("tyre_width") ?? ""}
             />
           </div>
@@ -172,7 +171,6 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
               id="tyre_profile"
               name="tyre_profile"
               inputMode="numeric"
-              placeholder="55"
               defaultValue={searchParams.get("tyre_profile") ?? ""}
             />
           </div>
@@ -182,7 +180,6 @@ export function StockFilters({ suppliers }: { suppliers: SupplierOption[] }) {
               id="tyre_rim_diameter"
               name="tyre_rim_diameter"
               inputMode="numeric"
-              placeholder="16"
               defaultValue={searchParams.get("tyre_rim_diameter") ?? ""}
             />
           </div>
