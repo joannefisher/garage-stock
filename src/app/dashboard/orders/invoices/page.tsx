@@ -4,10 +4,10 @@ import { InvoicesFilters } from "@/components/orders/invoices-filters"
 import { InvoicesTable } from "@/components/orders/invoices-table"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentStaff } from "@/lib/auth/current-staff"
-import { getInvoicesReport } from "@/lib/stock/orders-report"
+import { getInvoicesReport, groupOrdersByInvoice } from "@/lib/stock/orders-report"
 import type { InvoicesReportParams } from "@/lib/stock/orders-report"
 
-import { toggleOrderInvoicePaid } from "../actions"
+import { toggleInvoicePaid } from "../actions"
 
 type InvoicesSearchParams = InvoicesReportParams & { error?: string; paid?: string; unpaid?: string }
 
@@ -21,9 +21,16 @@ type InvoicesSearchParams = InvoicesReportParams & { error?: string; paid?: stri
  * showing only unpaid invoices; the status filter can widen that to Paid
  * or All. See getInvoicesReport's comment for how this carries over the
  * old report's "orders due" framing.
+ *
+ * Rows are grouped into one entry per invoice number (groupOrdersByInvoice)
+ * per Joanne's follow-up request ("Group invoices by unique numbers") —
+ * an invoice can cover more than one product/line, so the status filter
+ * below is applied to the GROUP (paid only when every line is paid), not
+ * to individual order lines.
  */
 export default async function InvoicesPage(props: PageProps<"/dashboard/orders/invoices">) {
   const searchParams = (await props.searchParams) as InvoicesSearchParams
+  const status = searchParams.status ?? "unpaid"
 
   const staff = await getCurrentStaff()
   if (!staff?.canManageStock) {
@@ -36,7 +43,14 @@ export default async function InvoicesPage(props: PageProps<"/dashboard/orders/i
     getInvoicesReport(searchParams),
   ])
 
-  const unpaidCount = rows.filter((r) => !r.invoice_paid_at).length
+  const allGroups = groupOrdersByInvoice(rows)
+  const groups = allGroups.filter((g) => {
+    if (status === "paid") return g.paidStatus === "paid"
+    if (status === "all") return true
+    return g.paidStatus !== "paid" // "unpaid" — includes partially-paid invoices
+  })
+
+  const unpaidCount = allGroups.filter((g) => g.paidStatus !== "paid").length
   const redirectTo = `/dashboard/orders/invoices?${new URLSearchParams(
     Object.entries(searchParams).filter(
       ([k, v]) => typeof v === "string" && !["error", "paid", "unpaid"].includes(k)
@@ -74,7 +88,7 @@ export default async function InvoicesPage(props: PageProps<"/dashboard/orders/i
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border bg-card p-4">
           <p className="text-sm text-muted-foreground">Invoices listed</p>
-          <p className="text-2xl font-bold tracking-tight">{rows.length}</p>
+          <p className="text-2xl font-bold tracking-tight">{groups.length}</p>
         </div>
         <div className="rounded-2xl border bg-card p-4">
           <p className="text-sm text-muted-foreground">Unpaid</p>
@@ -82,7 +96,7 @@ export default async function InvoicesPage(props: PageProps<"/dashboard/orders/i
         </div>
       </div>
 
-      <InvoicesTable rows={rows} toggleAction={toggleOrderInvoicePaid} redirectTo={redirectTo} />
+      <InvoicesTable groups={groups} toggleAction={toggleInvoicePaid} redirectTo={redirectTo} />
     </div>
   )
 }

@@ -261,43 +261,57 @@ export async function receiveOrderQuantity(formData: FormData) {
 }
 
 /**
- * Toggles an order's invoice between paid and unpaid — replaces the old
- * one-way markOrderInvoicePaid (Sept 2026 follow-up round). The new
- * Invoices page (../orders/invoices) needs to un-mark a paid invoice as
- * well as mark one paid ("mark an invoice as paid or unpaid", per
- * Joanne's request), so this reads the row's current invoice_paid_at
- * first and flips it, rather than keeping two separate one-directional
- * actions. Works regardless of quantity_received — an order can be fully
- * received (dropped off the outstanding Orders list) while its invoice
- * is still unpaid — the only requirement is that it's still an
- * 'ordered'-status lot (an order never changes status on receipt, see
- * receiveOrderQuantity above).
+ * Toggles an INVOICE (every order line sharing an invoice_number, scoped
+ * to one supplier) between paid and unpaid — replaces the old one-way
+ * markOrderInvoicePaid, and then the per-lot toggleOrderInvoicePaid, in
+ * this same Sept 2026 follow-up round. The Invoices page now groups
+ * order lines by invoice number ("Group invoices by unique numbers" —
+ * Joanne's request), since one invoice commonly covers more than one
+ * product/line — so toggling paid status has to act on the whole group
+ * at once, not a single stock_lots row, or a multi-line invoice could
+ * end up half-paid by accident.
+ *
+ * Reads every 'ordered'-status line for the (invoice_number, supplier_id)
+ * pair first to decide the new state: if every line is already paid,
+ * this un-pays all of them; otherwise it pays every line that isn't
+ * already paid (a already-paid line's own paid_at/by is left untouched,
+ * so re-toggling a partially-paid invoice to "paid" doesn't rewrite the
+ * timestamp on lines that were already settled). supplier_id may be
+ * empty (no supplier recorded on the order) — treated as NULL, matching
+ * the grouping key used to build the invoice list in the first place.
  */
-export async function toggleOrderInvoicePaid(formData: FormData) {
+export async function toggleInvoicePaid(formData: FormData) {
   const redirectTo = safeRedirectTo(formData, "/dashboard/orders/invoices")
-  const lotId = str(formData, "lot_id")
+  const invoiceNumber = str(formData, "invoice_number")
+  const supplierId = str(formData, "supplier_id") || null
 
   function fail(message: string): never {
     redirect(withParam(redirectTo, "error", message))
   }
 
-  if (!lotId) fail("That order could not be found.")
+  if (!invoiceNumber) fail("That invoice could not be found.")
 
   const staff = await getCurrentStaff()
   if (!staff) redirect("/login")
   if (!staff.canManageStock) fail("Only admins and managers can change an invoice's paid status.")
 
   const supabase = await createClient()
-  const { data: order } = await supabase
+  let linesQuery = supabase
     .from("stock_lots")
     .select("id, invoice_paid_at")
-    .eq("id", lotId)
     .eq("status", "ordered")
-    .maybeSingle()
+    .eq("invoice_number", invoiceNumber)
+  linesQuery = supplierId ? linesQuery.eq("supplier_id", supplierId) : linesQuery.is("supplier_id", null)
+  const { data: linesData } = await linesQuery
+  const lines = linesData ?? []
 
-  if (!order) fail("That order could not be found.")
+  if (lines.length === 0) fail("That invoice could not be found.")
 
-  const nowPaid = !order.invoice_paid_at
+  const nowPaid = !lines.every((l) => l.invoice_paid_at)
+  const lineIdsToUpdate = nowPaid
+    ? lines.filter((l) => !l.invoice_paid_at).map((l) => l.id)
+    : lines.map((l) => l.id)
+
   const { error } = await supabase
     .from("stock_lots")
     .update(
@@ -305,7 +319,7 @@ export async function toggleOrderInvoicePaid(formData: FormData) {
         ? { invoice_paid_at: new Date().toISOString(), invoice_paid_by: staff.id }
         : { invoice_paid_at: null, invoice_paid_by: null }
     )
-    .eq("id", lotId)
+    .in("id", lineIdsToUpdate)
     .eq("status", "ordered")
 
   if (error) {
