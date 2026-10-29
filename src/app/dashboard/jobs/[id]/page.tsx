@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Pencil } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -50,7 +50,7 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
     supabase
       .from("jobs")
       .select(
-        "id, job_number, vehicle_registration, notes, status, created_at, closed_at, customer_name, customer_company, customer_email, job_date"
+        "id, job_number, vehicle_registration, notes, status, created_at, closed_at, customer_name, customer_company, customer_email, job_date, mileage, hours_recorded, engine_number, chassis_number, customer_instruction, faults_found, tyre_pressure_nsf, tyre_pressure_osf, tyre_pressure_nsr, tyre_pressure_osr, antifreeze, discpads, tyres, exhaust"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -98,8 +98,16 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
             {job.closed_at && <> · Closed {new Date(job.closed_at).toLocaleString("en-GB")}</>}
           </p>
         </div>
-        {open && <CloseJobForm action={closeJob} jobId={job.id} />}
-        {!open && staff?.isAdmin && <ReopenJobForm action={reopenJob} jobId={job.id} />}
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/dashboard/jobs/${job.id}/edit`}>
+              <Pencil />
+              Edit
+            </Link>
+          </Button>
+          {open && <CloseJobForm action={closeJob} jobId={job.id} />}
+          {!open && staff?.isAdmin && <ReopenJobForm action={reopenJob} jobId={job.id} />}
+        </div>
       </div>
 
       {searchParams.error && (
@@ -126,7 +134,28 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
           <Row label="Customer" value={job.customer_name ?? "—"} />
           <Row label="Company" value={job.customer_company ?? "—"} />
           <Row label="Email" value={job.customer_email ?? "—"} />
-          {job.notes && <Row label="Notes" value={job.notes} />}
+          {job.customer_instruction && (
+            <Row label="Customer instruction" value={job.customer_instruction} />
+          )}
+          <Row label="Mileage" value={job.mileage != null ? `${job.mileage} mi` : "—"} />
+          <Row label="Hours recorded" value={job.hours_recorded != null ? String(job.hours_recorded) : "—"} />
+          <Row label="Engine number" value={job.engine_number ?? "—"} />
+          <Row label="Chassis number" value={job.chassis_number ?? "—"} />
+          {job.faults_found && <Row label="Faults found" value={job.faults_found} />}
+          {(job.tyre_pressure_nsf != null ||
+            job.tyre_pressure_osf != null ||
+            job.tyre_pressure_nsr != null ||
+            job.tyre_pressure_osr != null) && (
+            <Row
+              label="Tyre pressures (psi)"
+              value={`N.S.F ${job.tyre_pressure_nsf ?? "—"} · O.S.F ${job.tyre_pressure_osf ?? "—"} · N.S.R ${job.tyre_pressure_nsr ?? "—"} · O.S.R ${job.tyre_pressure_osr ?? "—"}`}
+            />
+          )}
+          {job.antifreeze && <Row label="Antifreeze" value={job.antifreeze} />}
+          {job.discpads && <Row label="Discpads" value={job.discpads} />}
+          {job.tyres && <Row label="Tyres" value={job.tyres} />}
+          {job.exhaust && <Row label="Exhaust" value={job.exhaust} />}
+          {job.notes && <Row label="Job details" value={job.notes} />}
         </CardContent>
       </Card>
 

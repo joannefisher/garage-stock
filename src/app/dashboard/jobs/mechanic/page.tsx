@@ -61,6 +61,24 @@ type SelectedJob = {
   customer_company: string | null
   notes: string | null
   status: "open" | "closed"
+  // 0023_job_additional_fields.sql — shown read-only here (mechanics edit
+  // a job through adding parts/marking it complete only, same as every
+  // other field on this screen; the edit form on the desktop job detail
+  // page is where any of these get corrected).
+  mileage: number | null
+  hours_recorded: number | null
+  engine_number: string | null
+  chassis_number: string | null
+  customer_instruction: string | null
+  faults_found: string | null
+  tyre_pressure_nsf: number | null
+  tyre_pressure_osf: number | null
+  tyre_pressure_nsr: number | null
+  tyre_pressure_osr: number | null
+  antifreeze: string | null
+  discpads: string | null
+  tyres: string | null
+  exhaust: string | null
 }
 
 type UsageRow = {
@@ -95,7 +113,9 @@ export default async function MechanicJobsPage(props: PageProps<"/dashboard/jobs
     selectedJobId
       ? supabase
           .from("jobs")
-          .select("id, job_number, vehicle_registration, customer_name, customer_company, notes, status")
+          .select(
+            "id, job_number, vehicle_registration, customer_name, customer_company, notes, status, mileage, hours_recorded, engine_number, chassis_number, customer_instruction, faults_found, tyre_pressure_nsf, tyre_pressure_osf, tyre_pressure_nsr, tyre_pressure_osr, antifreeze, discpads, tyres, exhaust"
+          )
           .eq("id", selectedJobId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -198,7 +218,63 @@ export default async function MechanicJobsPage(props: PageProps<"/dashboard/jobs
                 {selectedJob.customer_company ? ` (${selectedJob.customer_company})` : ""}
               </div>
             )}
-            {selectedJob.notes && <div className="mt-2 text-sm">{selectedJob.notes}</div>}
+            {selectedJob.customer_instruction && (
+              <div className="mt-2 text-sm">
+                <span className="font-semibold">Customer instruction: </span>
+                {selectedJob.customer_instruction}
+              </div>
+            )}
+            {(selectedJob.mileage != null || selectedJob.hours_recorded != null) && (
+              <div className="mt-2 text-sm text-muted-foreground">
+                {selectedJob.mileage != null && <>Mileage: {selectedJob.mileage} mi</>}
+                {selectedJob.mileage != null && selectedJob.hours_recorded != null && " · "}
+                {selectedJob.hours_recorded != null && <>Hours: {selectedJob.hours_recorded}</>}
+              </div>
+            )}
+            {(selectedJob.engine_number || selectedJob.chassis_number) && (
+              <div className="text-sm text-muted-foreground">
+                {selectedJob.engine_number && <>Engine: {selectedJob.engine_number}</>}
+                {selectedJob.engine_number && selectedJob.chassis_number && " · "}
+                {selectedJob.chassis_number && <>Chassis: {selectedJob.chassis_number}</>}
+              </div>
+            )}
+            {selectedJob.faults_found && (
+              <div className="mt-2 text-sm">
+                <span className="font-semibold">Faults found: </span>
+                {selectedJob.faults_found}
+              </div>
+            )}
+            {(selectedJob.tyre_pressure_nsf != null ||
+              selectedJob.tyre_pressure_osf != null ||
+              selectedJob.tyre_pressure_nsr != null ||
+              selectedJob.tyre_pressure_osr != null) && (
+              <div className="mt-2 text-sm text-muted-foreground">
+                Tyre pressures (psi): N.S.F {selectedJob.tyre_pressure_nsf ?? "—"} · O.S.F{" "}
+                {selectedJob.tyre_pressure_osf ?? "—"} · N.S.R {selectedJob.tyre_pressure_nsr ?? "—"} · O.S.R{" "}
+                {selectedJob.tyre_pressure_osr ?? "—"}
+              </div>
+            )}
+            {(selectedJob.antifreeze ||
+              selectedJob.discpads ||
+              selectedJob.tyres ||
+              selectedJob.exhaust) && (
+              <div className="mt-2 text-sm text-muted-foreground">
+                {[
+                  selectedJob.antifreeze && `Antifreeze: ${selectedJob.antifreeze}`,
+                  selectedJob.discpads && `Discpads: ${selectedJob.discpads}`,
+                  selectedJob.tyres && `Tyres: ${selectedJob.tyres}`,
+                  selectedJob.exhaust && `Exhaust: ${selectedJob.exhaust}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            )}
+            {selectedJob.notes && (
+              <div className="mt-2 text-sm">
+                <span className="font-semibold">Job details: </span>
+                {selectedJob.notes}
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border bg-card p-4">

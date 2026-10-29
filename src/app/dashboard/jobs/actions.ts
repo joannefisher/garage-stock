@@ -16,6 +16,45 @@ function optionalStr(formData: FormData, key: string): string | null {
 }
 
 /**
+ * Same as optionalStr, but for the new numeric job fields (0023_job_
+ * additional_fields.sql: mileage, hours_recorded, the four tyre
+ * pressures) — empty stays null (field left blank), anything that
+ * doesn't parse to a finite number is also treated as blank rather than
+ * failing the whole submission over one stray character, since none of
+ * these fields are required.
+ */
+function optionalNum(formData: FormData, key: string): number | null {
+  const raw = str(formData, key)
+  if (raw === "") return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
+}
+
+/**
+ * The fourteen optional fields added by 0023_job_additional_fields.sql —
+ * read the same way on both createJob (new job form) and updateJobDetails
+ * (edit form) below, so they're pulled from `formData` in one place.
+ */
+function readJobDetailFields(formData: FormData) {
+  return {
+    mileage: optionalNum(formData, "mileage"),
+    hours_recorded: optionalNum(formData, "hours_recorded"),
+    engine_number: optionalStr(formData, "engine_number"),
+    chassis_number: optionalStr(formData, "chassis_number"),
+    customer_instruction: optionalStr(formData, "customer_instruction"),
+    faults_found: optionalStr(formData, "faults_found"),
+    tyre_pressure_nsf: optionalNum(formData, "tyre_pressure_nsf"),
+    tyre_pressure_osf: optionalNum(formData, "tyre_pressure_osf"),
+    tyre_pressure_nsr: optionalNum(formData, "tyre_pressure_nsr"),
+    tyre_pressure_osr: optionalNum(formData, "tyre_pressure_osr"),
+    antifreeze: optionalStr(formData, "antifreeze"),
+    discpads: optionalStr(formData, "discpads"),
+    tyres: optionalStr(formData, "tyres"),
+    exhaust: optionalStr(formData, "exhaust"),
+  }
+}
+
+/**
  * Merges query params onto a redirect target that may already carry its
  * own query string (e.g. `/dashboard/jobs/mechanic?job=<id>`), without
  * clobbering it. Plain string concatenation (`${returnTo}?error=...`)
@@ -54,6 +93,8 @@ export async function createJob(formData: FormData) {
   const customerCompany = optionalStr(formData, "customer_company")
   const customerEmail = optionalStr(formData, "customer_email")
   const jobDate = optionalStr(formData, "job_date")
+  // 0023_job_additional_fields.sql — all optional.
+  const detailFields = readJobDetailFields(formData)
 
   const supabase = await createClient()
 
@@ -68,6 +109,12 @@ export async function createJob(formData: FormData) {
       customer_email: customerEmail ?? "",
       job_date: jobDate ?? "",
     })
+    // The new fields round-trip back onto the form the same way the
+    // original ones do above — only set when actually filled in, so a
+    // blank field doesn't show up as the literal text "null".
+    for (const [key, value] of Object.entries(detailFields)) {
+      if (value !== null) params.set(key, String(value))
+    }
     redirect(`/dashboard/jobs/new?${params.toString()}`)
   }
 
@@ -95,6 +142,7 @@ export async function createJob(formData: FormData) {
       customer_email: customerEmail,
       job_date: jobDate,
       created_by: staff.id,
+      ...detailFields,
     })
     .select("id")
     .single()
@@ -281,4 +329,77 @@ export async function addPartToJob(formData: FormData) {
   if (error) fail(friendlyDbError(error))
 
   redirect(appendParams(returnTo, { added: stockItem.id_number, addedQty: String(quantity) }))
+}
+
+/**
+ * Edits an existing job's own details — the core fields from 0009/0010
+ * (job reference, vehicle registration, job date, customer contact, Job
+ * Details/notes) plus all fourteen fields added by 0023_job_additional_
+ * fields.sql. Added alongside that migration: until now a job could only
+ * be closed/reopened after creation, never corrected or filled in further
+ * (e.g. mileage and faults found are often only known once the car's on
+ * the ramp, after the job was first logged) — see the jobs feature doc.
+ *
+ * Any signed-in staff member, matching the existing "Staff can update
+ * jobs" RLS policy (0009_jobs.sql) that already allows any staff to edit
+ * a job's notes/reference — this is the same trust level, just with a
+ * real form instead of no way to do it at all. Deliberately does NOT
+ * touch status, closed_by/closed_at, or reopened_by/reopened_at —
+ * closing/reopening stay their own actions above, with their own rules.
+ */
+export async function updateJobDetails(formData: FormData) {
+  const jobId = str(formData, "job_id")
+  const jobNumber = str(formData, "job_number")
+  const vehicleRegistration =
+    optionalStr(formData, "vehicle_registration")
+      ?.replace(/\s+/g, "")
+      .toUpperCase() || null
+  const notes = optionalStr(formData, "notes")
+  const customerName = optionalStr(formData, "customer_name")
+  const customerCompany = optionalStr(formData, "customer_company")
+  const customerEmail = optionalStr(formData, "customer_email")
+  const jobDate = optionalStr(formData, "job_date")
+  const detailFields = readJobDetailFields(formData)
+
+  const supabase = await createClient()
+
+  function fail(message: string) {
+    redirect(`/dashboard/jobs/${jobId}/edit?error=${encodeURIComponent(message)}`)
+  }
+
+  if (!jobNumber) fail("A job reference is required.")
+
+  // getCurrentStaff() and the vehicle re-match are independent — run
+  // concurrently rather than sequentially. See the perf note in CLAUDE.md.
+  // Re-resolving vehicle_id here (same lookup createJob does) means
+  // correcting a job's registration through this form actually updates
+  // which vehicle it's linked to, rather than leaving a stale match from
+  // creation time — this is an explicit edit, not the kind of passive
+  // drift the "not kept in sync afterwards" note in 0009 is about.
+  const [staff, { data: matchedVehicle }] = await Promise.all([
+    getCurrentStaff(),
+    vehicleRegistration
+      ? supabase.from("vehicles").select("id").eq("registration", vehicleRegistration).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  if (!staff) redirect("/login")
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({
+      job_number: jobNumber,
+      vehicle_registration: vehicleRegistration,
+      vehicle_id: matchedVehicle?.id ?? null,
+      notes,
+      customer_name: customerName,
+      customer_company: customerCompany,
+      customer_email: customerEmail,
+      job_date: jobDate,
+      ...detailFields,
+    })
+    .eq("id", jobId)
+
+  if (error) fail(friendlyDbError(error))
+
+  redirect(`/dashboard/jobs/${jobId}`)
 }

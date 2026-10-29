@@ -65,8 +65,26 @@ export function StockItemForm({
   // this hide is a convenience, not the enforcement.
   const [isBlackCircle, setIsBlackCircle] = useState(defaultIsBlackCircle ?? false)
 
+  // A handheld/USB barcode scanner types the scanned code into whatever
+  // field has focus and then sends an Enter keystroke, exactly like a
+  // fast typist hitting Return (this is separate from the in-app camera
+  // Scan button above, which sets the field's value directly and never
+  // fires a keystroke) — and a browser treats Enter in a focused
+  // single-line input as "submit the form" by default. Scanning the ID
+  // partway through filling this in would therefore save the product
+  // prematurely, before price/tyre size/etc. were entered. Joanne's
+  // explicit request: don't let Enter save the product — only the Save
+  // button should. Scoped to INPUT/SELECT (not TEXTAREA, where Enter
+  // should still just add a newline).
+  function preventEnterSubmit(e: React.KeyboardEvent<HTMLFormElement>) {
+    const tag = (e.target as HTMLElement).tagName
+    if (e.key === "Enter" && (tag === "INPUT" || tag === "SELECT")) {
+      e.preventDefault()
+    }
+  }
+
   return (
-    <form action={action} className="flex flex-col gap-6">
+    <form action={action} onKeyDown={preventEnterSubmit} className="flex flex-col gap-6">
       {redirectTo && <input type="hidden" name="redirect_to" value={redirectTo} />}
 
       {error && (

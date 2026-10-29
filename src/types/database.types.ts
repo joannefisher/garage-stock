@@ -733,6 +733,25 @@ export type JobRow = {
   // guard_job_reopen trigger, not by RLS alone (see that migration).
   reopened_by: string | null
   reopened_at: string | null
+  // 0023_job_additional_fields.sql — all optional, no backfill. "Job
+  // Details" in the UI is `notes` above, relabeled only; these fourteen
+  // are genuinely new columns. See that migration's comment for why
+  // mileage/hours_recorded/tyre pressures are numeric and
+  // antifreeze/discpads/tyres/exhaust are free text.
+  mileage: number | null
+  hours_recorded: number | null
+  engine_number: string | null
+  chassis_number: string | null
+  customer_instruction: string | null
+  faults_found: string | null
+  tyre_pressure_nsf: number | null
+  tyre_pressure_osf: number | null
+  tyre_pressure_nsr: number | null
+  tyre_pressure_osr: number | null
+  antifreeze: string | null
+  discpads: string | null
+  tyres: string | null
+  exhaust: string | null
 }
 export type JobInsert = {
   id?: string
@@ -752,6 +771,20 @@ export type JobInsert = {
   job_date?: string | null
   reopened_by?: string | null
   reopened_at?: string | null
+  mileage?: number | null
+  hours_recorded?: number | null
+  engine_number?: string | null
+  chassis_number?: string | null
+  customer_instruction?: string | null
+  faults_found?: string | null
+  tyre_pressure_nsf?: number | null
+  tyre_pressure_osf?: number | null
+  tyre_pressure_nsr?: number | null
+  tyre_pressure_osr?: number | null
+  antifreeze?: string | null
+  discpads?: string | null
+  tyres?: string | null
+  exhaust?: string | null
 }
 export type JobUpdate = Partial<JobInsert>
 

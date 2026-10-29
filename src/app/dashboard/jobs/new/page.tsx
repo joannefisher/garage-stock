@@ -14,6 +14,22 @@ type NewJobSearchParams = {
   customer_company?: string
   customer_email?: string
   job_date?: string
+  // 0023_job_additional_fields.sql — round-tripped back onto the form the
+  // same way the fields above are, if createJob rejects the submission.
+  mileage?: string
+  hours_recorded?: string
+  engine_number?: string
+  chassis_number?: string
+  customer_instruction?: string
+  faults_found?: string
+  tyre_pressure_nsf?: string
+  tyre_pressure_osf?: string
+  tyre_pressure_nsr?: string
+  tyre_pressure_osr?: string
+  antifreeze?: string
+  discpads?: string
+  tyres?: string
+  exhaust?: string
 }
 
 export default async function NewJobPage(props: PageProps<"/dashboard/jobs/new">) {
@@ -98,7 +114,146 @@ export default async function NewJobPage(props: PageProps<"/dashboard/jobs/new">
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="notes">Notes (optional)</Label>
+              <Label htmlFor="customer_instruction">Customer instruction (optional)</Label>
+              <textarea
+                id="customer_instruction"
+                name="customer_instruction"
+                rows={2}
+                placeholder="What the customer asked for"
+                defaultValue={searchParams.customer_instruction ?? ""}
+                className="border-input flex w-full min-w-0 rounded-xl border-[1.5px] bg-card px-3.5 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="col-span-full -mt-1 text-sm font-medium text-muted-foreground">
+                Vehicle details (optional)
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="mileage">Mileage</Label>
+                <Input
+                  id="mileage"
+                  name="mileage"
+                  type="number"
+                  min="0"
+                  inputMode="numeric"
+                  defaultValue={searchParams.mileage ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="hours_recorded">Hours recorded</Label>
+                <Input
+                  id="hours_recorded"
+                  name="hours_recorded"
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  defaultValue={searchParams.hours_recorded ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="engine_number">Engine number</Label>
+                <Input
+                  id="engine_number"
+                  name="engine_number"
+                  defaultValue={searchParams.engine_number ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="chassis_number">Chassis number</Label>
+                <Input
+                  id="chassis_number"
+                  name="chassis_number"
+                  defaultValue={searchParams.chassis_number ?? ""}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="faults_found">Faults found (optional)</Label>
+              <textarea
+                id="faults_found"
+                name="faults_found"
+                rows={2}
+                defaultValue={searchParams.faults_found ?? ""}
+                className="border-input flex w-full min-w-0 rounded-xl border-[1.5px] bg-card px-3.5 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 rounded-lg border p-4 sm:grid-cols-4">
+              <div className="col-span-full -mt-1 text-sm font-medium text-muted-foreground">
+                Tyre pressures, psi (optional)
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyre_pressure_nsf">N.S.F</Label>
+                <Input
+                  id="tyre_pressure_nsf"
+                  name="tyre_pressure_nsf"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={searchParams.tyre_pressure_nsf ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyre_pressure_osf">O.S.F</Label>
+                <Input
+                  id="tyre_pressure_osf"
+                  name="tyre_pressure_osf"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={searchParams.tyre_pressure_osf ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyre_pressure_nsr">N.S.R</Label>
+                <Input
+                  id="tyre_pressure_nsr"
+                  name="tyre_pressure_nsr"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={searchParams.tyre_pressure_nsr ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyre_pressure_osr">O.S.R</Label>
+                <Input
+                  id="tyre_pressure_osr"
+                  name="tyre_pressure_osr"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={searchParams.tyre_pressure_osr ?? ""}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="col-span-full -mt-1 text-sm font-medium text-muted-foreground">
+                Checks (optional)
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="antifreeze">Antifreeze</Label>
+                <Input id="antifreeze" name="antifreeze" defaultValue={searchParams.antifreeze ?? ""} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="discpads">Discpads</Label>
+                <Input id="discpads" name="discpads" defaultValue={searchParams.discpads ?? ""} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyres">Tyres</Label>
+                <Input id="tyres" name="tyres" defaultValue={searchParams.tyres ?? ""} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exhaust">Exhaust</Label>
+                <Input id="exhaust" name="exhaust" defaultValue={searchParams.exhaust ?? ""} />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="notes">Job details (optional)</Label>
               <textarea
                 id="notes"
                 name="notes"
