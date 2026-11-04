@@ -45,6 +45,7 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
   const paid = searchParams.paid === "1"
   const bcUsed = searchParams.bc_used === "1"
   const bcReturned = searchParams.bc_returned === "1"
+  const updated = searchParams.updated === "1"
 
   const supabase = await createClient()
 
@@ -141,11 +142,23 @@ export default async function StockItemPage(props: PageProps<"/dashboard/stock/[
           </Badge>
         )}
       </div>
-      <p className="font-medium text-muted-foreground">{stockItem.id_number}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium text-muted-foreground">{stockItem.id_number}</p>
+        {canManageStock && (
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/dashboard/stock/${stockItem.id}/edit`}>Edit product</Link>
+          </Button>
+        )}
+      </div>
 
       {error && (
         <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
+        </p>
+      )}
+      {updated && (
+        <p className="rounded-xl border border-green-600/40 bg-green-600/10 p-3 text-sm text-green-700 dark:text-green-400">
+          ✓ Product details saved.
         </p>
       )}
       {returnedLot && (

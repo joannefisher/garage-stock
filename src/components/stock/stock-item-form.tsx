@@ -12,6 +12,47 @@ interface SupplierOption {
   name: string
 }
 
+/**
+ * Current values of an existing product, used to prefill the form in
+ * edit mode (/dashboard/stock/[id]/edit, Nov 2026). Only the fields the
+ * form actually lets you change — quantity, item type and the Black
+ * Circle flag are deliberately not editable here (see the mode comment
+ * on StockItemForm).
+ */
+export interface StockItemFormValues {
+  item_type: "part" | "tyre"
+  id_number: string
+  name: string
+  supplier_id: string | null
+  cost_price: number
+  selling_price: number
+  ideal_stock_level: number
+  location: string | null
+  is_non_returnable: boolean
+  is_consignment: boolean
+  is_black_circle: boolean
+  vehicle_note: string | null
+  notes: string | null
+  part?: {
+    vehicle_make: string | null
+    vehicle_model: string | null
+    manufacturer_part_number: string | null
+    oem_part_number: string | null
+  } | null
+  tyre?: {
+    width: number
+    profile: number
+    rim_diameter: number
+    load_index: string | null
+    speed_rating: string | null
+    load_rating: string
+    season: string
+    tier: string
+    brand: string | null
+    pattern: string | null
+  } | null
+}
+
 const selectClass =
   "border-input h-10 w-full rounded-xl border-[1.5px] bg-card px-3.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
@@ -23,6 +64,8 @@ export function StockItemForm({
   defaultSupplierId,
   defaultIsBlackCircle,
   redirectTo,
+  mode = "create",
+  initial,
 }: {
   suppliers: SupplierOption[]
   action: (formData: FormData) => void
@@ -57,13 +100,28 @@ export function StockItemForm({
    * flow (step C) once a product created mid-order-flow is saved.
    */
   redirectTo?: string
+  /**
+   * "edit" (Nov 2026) reuses this form for /dashboard/stock/[id]/edit,
+   * prefilled from `initial`. In edit mode:
+   * - Item type and the Black Circle flag are shown but locked — switching
+   *   either would orphan the product's part/tyre details row or its
+   *   existing lots, so they're not something to flip from a form.
+   * - "Starting quantity" and "Cost price inc. VAT" are hidden — quantity
+   *   only ever changes through the stock_movements ledger (Adjust stock /
+   *   Receive stock), and inc-VAT price lives on each lot, not the product.
+   */
+  mode?: "create" | "edit"
+  initial?: StockItemFormValues
 }) {
-  const [itemType, setItemType] = useState<"part" | "tyre">(defaultIsBlackCircle ? "tyre" : "part")
+  const isEdit = mode === "edit"
+  const [itemType, setItemType] = useState<"part" | "tyre">(
+    initial?.item_type ?? (defaultIsBlackCircle ? "tyre" : "part")
+  )
   // Black Circle tyres are never owned or charged for (0016_black_circle_
   // stock.sql) — hiding the price fields here is the UI half of that;
   // the server action hard-zeros both regardless of what's submitted, so
   // this hide is a convenience, not the enforcement.
-  const [isBlackCircle, setIsBlackCircle] = useState(defaultIsBlackCircle ?? false)
+  const [isBlackCircle, setIsBlackCircle] = useState(initial?.is_black_circle ?? defaultIsBlackCircle ?? false)
 
   // A handheld/USB barcode scanner types the scanned code into whatever
   // field has focus and then sends an Enter keystroke, exactly like a
@@ -95,6 +153,8 @@ export function StockItemForm({
 
       <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
         <legend className="px-1 text-sm font-medium">Item type</legend>
+        {/* Disabled radios don't submit, so edit mode carries the value in a hidden field. */}
+        {isEdit && <input type="hidden" name="item_type" value={itemType} />}
         <div className="flex gap-4">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -103,6 +163,7 @@ export function StockItemForm({
               value="part"
               checked={itemType === "part"}
               onChange={() => setItemType("part")}
+              disabled={isEdit}
             />
             Part
           </label>
@@ -113,10 +174,16 @@ export function StockItemForm({
               value="tyre"
               checked={itemType === "tyre"}
               onChange={() => setItemType("tyre")}
+              disabled={isEdit}
             />
             Tyre
           </label>
         </div>
+        {isEdit && (
+          <p className="text-xs text-muted-foreground">
+            Item type can&apos;t be changed once a product exists.
+          </p>
+        )}
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -124,11 +191,11 @@ export function StockItemForm({
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="id_number">ID / barcode *</Label>
-          <ScannableIdInput id="id_number" name="id_number" defaultValue={defaultIdNumber} required />
+          <ScannableIdInput id="id_number" name="id_number" defaultValue={initial?.id_number ?? defaultIdNumber} required />
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
           <Label htmlFor="name">Name *</Label>
-          <Input id="name" name="name" required />
+          <Input id="name" name="name" defaultValue={initial?.name} required />
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -136,7 +203,7 @@ export function StockItemForm({
           <select
             id="supplier_id"
             name="supplier_id"
-            defaultValue={defaultSupplierId ?? ""}
+            defaultValue={initial ? initial.supplier_id ?? "" : defaultSupplierId ?? ""}
             className={selectClass}
           >
             <option value="">— none —</option>
@@ -151,8 +218,16 @@ export function StockItemForm({
           <>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cost_price">Cost price exc. VAT (£)</Label>
-              <Input id="cost_price" name="cost_price" type="number" step="0.01" min="0" defaultValue="0" />
+              <Input
+                id="cost_price"
+                name="cost_price"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={String(initial?.cost_price ?? 0)}
+              />
             </div>
+            {!isEdit && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="price_inc_vat">Cost price inc. VAT (£, optional)</Label>
               <Input
@@ -164,6 +239,7 @@ export function StockItemForm({
                 placeholder="Only needed if you track it"
               />
             </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="selling_price">Selling price (£)</Label>
               <Input
@@ -172,7 +248,7 @@ export function StockItemForm({
                 type="number"
                 step="0.01"
                 min="0"
-                defaultValue="0"
+                defaultValue={String(initial?.selling_price ?? 0)}
               />
             </div>
           </>
@@ -180,23 +256,41 @@ export function StockItemForm({
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="ideal_stock_level">Ideal stock level</Label>
-          <Input id="ideal_stock_level" name="ideal_stock_level" type="number" min="0" defaultValue="0" />
+          <Input
+            id="ideal_stock_level"
+            name="ideal_stock_level"
+            type="number"
+            min="0"
+            defaultValue={String(initial?.ideal_stock_level ?? 0)}
+          />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="initial_quantity">Starting quantity on hand</Label>
-          <Input id="initial_quantity" name="initial_quantity" type="number" min="0" defaultValue="0" />
-        </div>
+        {!isEdit && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="initial_quantity">Starting quantity on hand</Label>
+            <Input id="initial_quantity" name="initial_quantity" type="number" min="0" defaultValue="0" />
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="location">Location / bin</Label>
-          <Input id="location" name="location" />
+          <Input id="location" name="location" defaultValue={initial?.location ?? ""} />
         </div>
 
         <div className="flex items-center gap-2">
-          <input id="is_non_returnable" name="is_non_returnable" type="checkbox" />
+          <input
+            id="is_non_returnable"
+            name="is_non_returnable"
+            type="checkbox"
+            defaultChecked={initial?.is_non_returnable ?? false}
+          />
           <Label htmlFor="is_non_returnable">Non-returnable</Label>
         </div>
         <div className="flex items-center gap-2">
-          <input id="is_consignment" name="is_consignment" type="checkbox" />
+          <input
+            id="is_consignment"
+            name="is_consignment"
+            type="checkbox"
+            defaultChecked={initial?.is_consignment ?? false}
+          />
           <Label htmlFor="is_consignment">
             On account (loaned from supplier, not owned)
           </Label>
@@ -208,6 +302,7 @@ export function StockItemForm({
             type="checkbox"
             checked={isBlackCircle}
             onChange={(e) => setIsBlackCircle(e.target.checked)}
+            disabled={isEdit}
           />
           <Label htmlFor="is_black_circle">
             Black Circle stock (never owned, job-locked, no charge for the tyre)
@@ -216,11 +311,16 @@ export function StockItemForm({
 
         <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
           <Label htmlFor="vehicle_note">Vehicle note (quick free text)</Label>
-          <Input id="vehicle_note" name="vehicle_note" placeholder="e.g. Ford Fiesta Mk7" />
+          <Input
+            id="vehicle_note"
+            name="vehicle_note"
+            placeholder="e.g. Ford Fiesta Mk7"
+            defaultValue={initial?.vehicle_note ?? ""}
+          />
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
           <Label htmlFor="notes">Notes</Label>
-          <Input id="notes" name="notes" />
+          <Input id="notes" name="notes" defaultValue={initial?.notes ?? ""} />
         </div>
       </fieldset>
 
@@ -229,19 +329,19 @@ export function StockItemForm({
           <legend className="px-1 text-sm font-medium">Part details</legend>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="vehicle_make">Vehicle make</Label>
-            <Input id="vehicle_make" name="vehicle_make" />
+            <Input id="vehicle_make" name="vehicle_make" defaultValue={initial?.part?.vehicle_make ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="vehicle_model">Vehicle model</Label>
-            <Input id="vehicle_model" name="vehicle_model" />
+            <Input id="vehicle_model" name="vehicle_model" defaultValue={initial?.part?.vehicle_model ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="manufacturer_part_number">Manufacturer part number</Label>
-            <Input id="manufacturer_part_number" name="manufacturer_part_number" />
+            <Input id="manufacturer_part_number" name="manufacturer_part_number" defaultValue={initial?.part?.manufacturer_part_number ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="oem_part_number">OEM part number</Label>
-            <Input id="oem_part_number" name="oem_part_number" />
+            <Input id="oem_part_number" name="oem_part_number" defaultValue={initial?.part?.oem_part_number ?? ""} />
           </div>
         </fieldset>
       )}
@@ -251,35 +351,47 @@ export function StockItemForm({
           <legend className="px-1 text-sm font-medium">Tyre details</legend>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="width">Width *</Label>
-            <Input id="width" name="width" type="number" required placeholder="205" />
+            <Input id="width" name="width" type="number" required placeholder="205" defaultValue={initial?.tyre?.width} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="profile">Profile *</Label>
-            <Input id="profile" name="profile" type="number" required placeholder="55" />
+            <Input id="profile" name="profile" type="number" required placeholder="55" defaultValue={initial?.tyre?.profile} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="rim_diameter">Rim diameter *</Label>
-            <Input id="rim_diameter" name="rim_diameter" type="number" required placeholder="16" />
+            <Input
+              id="rim_diameter"
+              name="rim_diameter"
+              type="number"
+              required
+              placeholder="16"
+              defaultValue={initial?.tyre?.rim_diameter}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="load_index">Load index</Label>
-            <Input id="load_index" name="load_index" />
+            <Input id="load_index" name="load_index" defaultValue={initial?.tyre?.load_index ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="speed_rating">Speed rating</Label>
-            <Input id="speed_rating" name="speed_rating" placeholder="V" />
+            <Input
+              id="speed_rating"
+              name="speed_rating"
+              placeholder="V"
+              defaultValue={initial?.tyre?.speed_rating ?? ""}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="brand">Brand</Label>
-            <Input id="brand" name="brand" />
+            <Input id="brand" name="brand" defaultValue={initial?.tyre?.brand ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="pattern">Pattern</Label>
-            <Input id="pattern" name="pattern" />
+            <Input id="pattern" name="pattern" defaultValue={initial?.tyre?.pattern ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="season">Season</Label>
-            <select id="season" name="season" defaultValue="summer" className={selectClass}>
+            <select id="season" name="season" defaultValue={initial?.tyre?.season ?? "summer"} className={selectClass}>
               <option value="summer">Summer</option>
               <option value="winter">Winter</option>
               <option value="all_season">All season</option>
@@ -287,7 +399,7 @@ export function StockItemForm({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="tier">Tier</Label>
-            <select id="tier" name="tier" defaultValue="mid_range" className={selectClass}>
+            <select id="tier" name="tier" defaultValue={initial?.tyre?.tier ?? "mid_range"} className={selectClass}>
               <option value="budget">Budget</option>
               <option value="mid_range">Mid-range</option>
               <option value="premium">Premium</option>
@@ -298,7 +410,7 @@ export function StockItemForm({
             <select
               id="load_rating"
               name="load_rating"
-              defaultValue="standard"
+              defaultValue={initial?.tyre?.load_rating ?? "standard"}
               className={selectClass}
             >
               <option value="standard">Standard</option>
@@ -310,7 +422,7 @@ export function StockItemForm({
       )}
 
       <div className="flex justify-end gap-2">
-        <SubmitButton pendingText="Saving…">Save product</SubmitButton>
+        <SubmitButton pendingText="Saving…">{isEdit ? "Save changes" : "Save product"}</SubmitButton>
       </div>
     </form>
   )
