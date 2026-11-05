@@ -39,7 +39,7 @@ export default async function EditJobPage(props: PageProps<"/dashboard/jobs/[id]
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, job_number, vehicle_registration, notes, job_date, customer_name, customer_company, customer_email, mileage, hours_recorded, engine_number, chassis_number, customer_instruction, faults_found, tyre_pressure_nsf, tyre_pressure_osf, tyre_pressure_nsr, tyre_pressure_osr, antifreeze, discpads, tyres, exhaust"
+      "id, job_number, vehicle_registration, notes, job_date, customer_name, customer_company, customer_email, mileage, hours_recorded, engine_number, chassis_number, customer_instruction, faults_found, tyre_pressure_nsf, tyre_pressure_osf, tyre_pressure_nsr, tyre_pressure_osr, tyre_tread_nsf, tyre_tread_osf, tyre_tread_nsr, tyre_tread_osr, antifreeze, disc_front_wear, disc_rear_wear, pads_front_mm, pads_rear_mm, tyres, exhaust, screenwash, oil"
     )
     .eq("id", id)
     .maybeSingle()
@@ -223,9 +223,56 @@ export default async function EditJobPage(props: PageProps<"/dashboard/jobs/[id]
                   defaultValue={job.tyre_pressure_osr ?? ""}
                 />
               </div>
+              <div className="col-span-full mt-2 text-sm font-medium text-muted-foreground">
+                Tread depth, mm (optional)
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyre_tread_nsf">N.S.F</Label>
+                <Input
+                  id="tyre_tread_nsf"
+                  name="tyre_tread_nsf"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={job.tyre_tread_nsf ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyre_tread_osf">O.S.F</Label>
+                <Input
+                  id="tyre_tread_osf"
+                  name="tyre_tread_osf"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={job.tyre_tread_osf ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyre_tread_nsr">N.S.R</Label>
+                <Input
+                  id="tyre_tread_nsr"
+                  name="tyre_tread_nsr"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={job.tyre_tread_nsr ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tyre_tread_osr">O.S.R</Label>
+                <Input
+                  id="tyre_tread_osr"
+                  name="tyre_tread_osr"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={job.tyre_tread_osr ?? ""}
+                />
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="col-span-full -mt-1 text-sm font-medium text-muted-foreground">
                 Checks (optional)
               </div>
@@ -234,16 +281,66 @@ export default async function EditJobPage(props: PageProps<"/dashboard/jobs/[id]
                 <Input id="antifreeze" name="antifreeze" defaultValue={job.antifreeze ?? ""} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="discpads">Discpads</Label>
-                <Input id="discpads" name="discpads" defaultValue={job.discpads ?? ""} />
-              </div>
-              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="tyres">Tyres</Label>
                 <Input id="tyres" name="tyres" defaultValue={job.tyres ?? ""} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="exhaust">Exhaust</Label>
                 <Input id="exhaust" name="exhaust" defaultValue={job.exhaust ?? ""} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="screenwash">Screenwash</Label>
+                <Input id="screenwash" name="screenwash" defaultValue={job.screenwash ?? ""} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="oil">Oil</Label>
+                <Input id="oil" name="oil" defaultValue={job.oil ?? ""} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 rounded-lg border p-4 sm:grid-cols-4">
+              <div className="col-span-full -mt-1 text-sm font-medium text-muted-foreground">
+                Discs and pads (optional)
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="disc_front_wear">Disc front (wear)</Label>
+                <Input
+                  id="disc_front_wear"
+                  name="disc_front_wear"
+                  placeholder="e.g. OK, lipped"
+                  defaultValue={job.disc_front_wear ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="disc_rear_wear">Disc rear (wear)</Label>
+                <Input
+                  id="disc_rear_wear"
+                  name="disc_rear_wear"
+                  placeholder="e.g. OK, lipped"
+                  defaultValue={job.disc_rear_wear ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="pads_front_mm">Pads front (mm)</Label>
+                <Input
+                  id="pads_front_mm"
+                  name="pads_front_mm"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={job.pads_front_mm ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="pads_rear_mm">Pads rear (mm)</Label>
+                <Input
+                  id="pads_rear_mm"
+                  name="pads_rear_mm"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  defaultValue={job.pads_rear_mm ?? ""}
+                />
               </div>
             </div>
 

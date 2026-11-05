@@ -31,7 +31,8 @@ function optionalNum(formData: FormData, key: string): number | null {
 }
 
 /**
- * The fourteen optional fields added by 0023_job_additional_fields.sql —
+ * The optional fields added by 0023_job_additional_fields.sql and
+ * 0024_job_tread_discs_pads_checks.sql —
  * read the same way on both createJob (new job form) and updateJobDetails
  * (edit form) below, so they're pulled from `formData` in one place.
  */
@@ -47,10 +48,19 @@ function readJobDetailFields(formData: FormData) {
     tyre_pressure_osf: optionalNum(formData, "tyre_pressure_osf"),
     tyre_pressure_nsr: optionalNum(formData, "tyre_pressure_nsr"),
     tyre_pressure_osr: optionalNum(formData, "tyre_pressure_osr"),
+    tyre_tread_nsf: optionalNum(formData, "tyre_tread_nsf"),
+    tyre_tread_osf: optionalNum(formData, "tyre_tread_osf"),
+    tyre_tread_nsr: optionalNum(formData, "tyre_tread_nsr"),
+    tyre_tread_osr: optionalNum(formData, "tyre_tread_osr"),
     antifreeze: optionalStr(formData, "antifreeze"),
-    discpads: optionalStr(formData, "discpads"),
+    disc_front_wear: optionalStr(formData, "disc_front_wear"),
+    disc_rear_wear: optionalStr(formData, "disc_rear_wear"),
+    pads_front_mm: optionalNum(formData, "pads_front_mm"),
+    pads_rear_mm: optionalNum(formData, "pads_rear_mm"),
     tyres: optionalStr(formData, "tyres"),
     exhaust: optionalStr(formData, "exhaust"),
+    screenwash: optionalStr(formData, "screenwash"),
+    oil: optionalStr(formData, "oil"),
   }
 }
 

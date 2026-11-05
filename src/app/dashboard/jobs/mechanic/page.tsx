@@ -75,8 +75,17 @@ type SelectedJob = {
   tyre_pressure_osf: number | null
   tyre_pressure_nsr: number | null
   tyre_pressure_osr: number | null
+  tyre_tread_nsf: number | null
+  tyre_tread_osf: number | null
+  tyre_tread_nsr: number | null
+  tyre_tread_osr: number | null
   antifreeze: string | null
-  discpads: string | null
+  disc_front_wear: string | null
+  disc_rear_wear: string | null
+  pads_front_mm: number | null
+  pads_rear_mm: number | null
+  screenwash: string | null
+  oil: string | null
   tyres: string | null
   exhaust: string | null
 }
@@ -114,7 +123,7 @@ export default async function MechanicJobsPage(props: PageProps<"/dashboard/jobs
       ? supabase
           .from("jobs")
           .select(
-            "id, job_number, vehicle_registration, customer_name, customer_company, notes, status, mileage, hours_recorded, engine_number, chassis_number, customer_instruction, faults_found, tyre_pressure_nsf, tyre_pressure_osf, tyre_pressure_nsr, tyre_pressure_osr, antifreeze, discpads, tyres, exhaust"
+            "id, job_number, vehicle_registration, customer_name, customer_company, notes, status, mileage, hours_recorded, engine_number, chassis_number, customer_instruction, faults_found, tyre_pressure_nsf, tyre_pressure_osf, tyre_pressure_nsr, tyre_pressure_osr, tyre_tread_nsf, tyre_tread_osf, tyre_tread_nsr, tyre_tread_osr, antifreeze, disc_front_wear, disc_rear_wear, pads_front_mm, pads_rear_mm, tyres, exhaust, screenwash, oil"
           )
           .eq("id", selectedJobId)
           .maybeSingle()
@@ -254,16 +263,36 @@ export default async function MechanicJobsPage(props: PageProps<"/dashboard/jobs
                 {selectedJob.tyre_pressure_osr ?? "—"}
               </div>
             )}
+            {(selectedJob.tyre_tread_nsf != null ||
+              selectedJob.tyre_tread_osf != null ||
+              selectedJob.tyre_tread_nsr != null ||
+              selectedJob.tyre_tread_osr != null) && (
+              <p>
+                Tread depth (mm): N.S.F {selectedJob.tyre_tread_nsf ?? "—"} · O.S.F{" "}
+                {selectedJob.tyre_tread_osf ?? "—"} · N.S.R {selectedJob.tyre_tread_nsr ?? "—"} · O.S.R{" "}
+                {selectedJob.tyre_tread_osr ?? "—"}
+              </p>
+            )}
             {(selectedJob.antifreeze ||
-              selectedJob.discpads ||
+              selectedJob.disc_front_wear ||
+              selectedJob.disc_rear_wear ||
+              selectedJob.pads_front_mm != null ||
+              selectedJob.pads_rear_mm != null ||
               selectedJob.tyres ||
-              selectedJob.exhaust) && (
+              selectedJob.exhaust ||
+              selectedJob.screenwash ||
+              selectedJob.oil) && (
               <div className="mt-2 text-sm text-muted-foreground">
                 {[
                   selectedJob.antifreeze && `Antifreeze: ${selectedJob.antifreeze}`,
-                  selectedJob.discpads && `Discpads: ${selectedJob.discpads}`,
+                  selectedJob.disc_front_wear && `Disc front: ${selectedJob.disc_front_wear}`,
+                  selectedJob.disc_rear_wear && `Disc rear: ${selectedJob.disc_rear_wear}`,
+                  selectedJob.pads_front_mm != null && `Pads front: ${selectedJob.pads_front_mm}mm`,
+                  selectedJob.pads_rear_mm != null && `Pads rear: ${selectedJob.pads_rear_mm}mm`,
                   selectedJob.tyres && `Tyres: ${selectedJob.tyres}`,
                   selectedJob.exhaust && `Exhaust: ${selectedJob.exhaust}`,
+                  selectedJob.screenwash && `Screenwash: ${selectedJob.screenwash}`,
+                  selectedJob.oil && `Oil: ${selectedJob.oil}`,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

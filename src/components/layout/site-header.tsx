@@ -9,7 +9,7 @@ import { SiteNav } from "@/components/layout/site-nav"
 
 export async function SiteHeader() {
   const staff = await getCurrentStaff()
-  const user = staff ? { email: staff.email } : null
+  const user = staff ? { label: staff.username ?? staff.fullName } : null
   const role = staff?.role ?? null
   const canManageStock = staff?.canManageStock ?? false
   const isMechanic = staff?.isMechanic ?? false
@@ -42,7 +42,7 @@ export async function SiteHeader() {
         </div>
         {user && (
           <div className="flex items-center gap-3 text-sm">
-            <span className="hidden text-header-muted-foreground sm:inline">{user.email}</span>
+            <span className="hidden text-header-muted-foreground sm:inline">{user.label}</span>
             {role && (
               <Badge variant="secondary" className="uppercase tracking-wide">
                 {role}

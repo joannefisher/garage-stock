@@ -28,11 +28,23 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
-          Manage the lists other screens pick from.
+          Manage your team and the lists other screens pick from.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Link href="/dashboard/settings/team">
+          <Card className="transition-colors hover:bg-accent">
+            <CardHeader>
+              <CardTitle>Team</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Add staff logins, set roles and passwords, and deactivate or reactivate people.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
         <Link href="/dashboard/settings/suppliers">
           <Card className="transition-colors hover:bg-accent">
             <CardHeader>

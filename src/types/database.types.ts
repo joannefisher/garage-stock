@@ -64,6 +64,12 @@ export type ProfileRow = {
   role: StaffRole
   created_at: string
   updated_at: string
+  // 0025_staff_usernames_and_deactivation.sql — sign-in name (the Auth
+  // login is <username>@rivermead.local) and deactivation.
+  username: string | null
+  is_active: boolean
+  deactivated_at: string | null
+  deactivated_by: string | null
 }
 export type ProfileInsert = {
   id: string
@@ -71,6 +77,10 @@ export type ProfileInsert = {
   role?: StaffRole
   created_at?: string
   updated_at?: string
+  username?: string | null
+  is_active?: boolean
+  deactivated_at?: string | null
+  deactivated_by?: string | null
 }
 export type ProfileUpdate = Partial<ProfileInsert>
 
@@ -748,6 +758,16 @@ export type JobRow = {
   tyre_pressure_osf: number | null
   tyre_pressure_nsr: number | null
   tyre_pressure_osr: number | null
+  tyre_tread_nsf: number | null
+  tyre_tread_osf: number | null
+  tyre_tread_nsr: number | null
+  tyre_tread_osr: number | null
+  disc_front_wear: string | null
+  disc_rear_wear: string | null
+  screenwash: string | null
+  oil: string | null
+  pads_front_mm: number | null
+  pads_rear_mm: number | null
   antifreeze: string | null
   discpads: string | null
   tyres: string | null
@@ -781,6 +801,16 @@ export type JobInsert = {
   tyre_pressure_osf?: number | null
   tyre_pressure_nsr?: number | null
   tyre_pressure_osr?: number | null
+  tyre_tread_nsf?: number | null
+  tyre_tread_osf?: number | null
+  tyre_tread_nsr?: number | null
+  tyre_tread_osr?: number | null
+  disc_front_wear?: string | null
+  disc_rear_wear?: string | null
+  screenwash?: string | null
+  oil?: string | null
+  pads_front_mm?: number | null
+  pads_rear_mm?: number | null
   antifreeze?: string | null
   discpads?: string | null
   tyres?: string | null

@@ -8,6 +8,13 @@ export type CurrentStaff = {
   email: string | null
   fullName: string
   role: StaffRole
+  username: string | null
+  /**
+   * False once an admin/manager deactivates the account (0025). Every
+   * permission flag below is forced false too, and the dashboard layout
+   * signs the person out — see src/app/auth/deactivated/route.ts.
+   */
+  isActive: boolean
   /** admin or manager — the two roles the RLS policies treat as "staff who manage stock". */
   canManageStock: boolean
   isAdmin: boolean
@@ -64,19 +71,23 @@ export const getCurrentStaff = cache(async (): Promise<CurrentStaff | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, role")
+    .select("full_name, role, username, is_active")
     .eq("id", claims.sub)
-    .single()
+    .maybeSingle()
 
   const role: StaffRole = profile?.role ?? "mechanic"
+  // No readable profile at all is treated as inactive — fail closed.
+  const isActive = profile?.is_active ?? false
 
   return {
     id: claims.sub,
     email: claims.email ?? null,
     fullName: profile?.full_name ?? claims.email ?? "Unknown",
+    username: profile?.username ?? null,
     role,
-    canManageStock: role === "admin" || role === "manager",
-    isAdmin: role === "admin",
-    isMechanic: role === "mechanic" || role === "staff",
+    isActive,
+    canManageStock: isActive && (role === "admin" || role === "manager"),
+    isAdmin: isActive && role === "admin",
+    isMechanic: !isActive || role === "mechanic" || role === "staff",
   }
 })

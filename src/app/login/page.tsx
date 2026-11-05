@@ -34,12 +34,14 @@ export default async function LoginPage(props: PageProps<"/login">) {
           <form action={login} className="flex flex-col gap-4">
             <input type="hidden" name="next" value={next} />
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
               />
             </div>

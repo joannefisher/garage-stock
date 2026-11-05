@@ -3,22 +3,33 @@
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
+import { loginIdentifierToEmail } from "@/lib/auth/usernames"
 
 export async function login(formData: FormData) {
-  const email = String(formData.get("email") ?? "")
+  // Staff sign in with a username (Nov 2026); older accounts can still
+  // type their full email. See src/lib/auth/usernames.ts.
+  const identifier = String(formData.get("username") ?? "").trim()
   const password = String(formData.get("password") ?? "")
   const next = String(formData.get("next") ?? "/dashboard")
 
-  if (!email || !password) {
-    redirect(`/login?error=${encodeURIComponent("Email and password are required.")}`)
+  if (!identifier || !password) {
+    redirect(`/login?error=${encodeURIComponent("Username and password are required.")}`)
   }
 
   const supabase = await createClient()
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { error } = await supabase.auth.signInWithPassword({
+    email: loginIdentifierToEmail(identifier),
+    password,
+  })
 
   if (error) {
-    redirect(`/login?error=${encodeURIComponent(error.message)}`)
+    const message = /banned/i.test(error.message)
+      ? "This account has been deactivated. Ask an admin or manager to reactivate it."
+      : /invalid login credentials/i.test(error.message)
+        ? "Wrong username or password."
+        : error.message
+    redirect(`/login?error=${encodeURIComponent(message)}`)
   }
 
   redirect(next)

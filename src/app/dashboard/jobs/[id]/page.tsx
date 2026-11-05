@@ -50,7 +50,7 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
     supabase
       .from("jobs")
       .select(
-        "id, job_number, vehicle_registration, notes, status, created_at, closed_at, customer_name, customer_company, customer_email, job_date, mileage, hours_recorded, engine_number, chassis_number, customer_instruction, faults_found, tyre_pressure_nsf, tyre_pressure_osf, tyre_pressure_nsr, tyre_pressure_osr, antifreeze, discpads, tyres, exhaust"
+        "id, job_number, vehicle_registration, notes, status, created_at, closed_at, customer_name, customer_company, customer_email, job_date, mileage, hours_recorded, engine_number, chassis_number, customer_instruction, faults_found, tyre_pressure_nsf, tyre_pressure_osf, tyre_pressure_nsr, tyre_pressure_osr, tyre_tread_nsf, tyre_tread_osf, tyre_tread_nsr, tyre_tread_osr, antifreeze, disc_front_wear, disc_rear_wear, pads_front_mm, pads_rear_mm, tyres, exhaust, screenwash, oil"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -151,10 +151,32 @@ export default async function JobDetailPage(props: PageProps<"/dashboard/jobs/[i
               value={`N.S.F ${job.tyre_pressure_nsf ?? "—"} · O.S.F ${job.tyre_pressure_osf ?? "—"} · N.S.R ${job.tyre_pressure_nsr ?? "—"} · O.S.R ${job.tyre_pressure_osr ?? "—"}`}
             />
           )}
+          {(job.tyre_tread_nsf != null ||
+            job.tyre_tread_osf != null ||
+            job.tyre_tread_nsr != null ||
+            job.tyre_tread_osr != null) && (
+            <Row
+              label="Tread depth (mm)"
+              value={`N.S.F ${job.tyre_tread_nsf ?? "—"} · O.S.F ${job.tyre_tread_osf ?? "—"} · N.S.R ${job.tyre_tread_nsr ?? "—"} · O.S.R ${job.tyre_tread_osr ?? "—"}`}
+            />
+          )}
           {job.antifreeze && <Row label="Antifreeze" value={job.antifreeze} />}
-          {job.discpads && <Row label="Discpads" value={job.discpads} />}
+          {(job.disc_front_wear || job.disc_rear_wear) && (
+            <Row
+              label="Discs (wear)"
+              value={`Front ${job.disc_front_wear ?? "—"} · Rear ${job.disc_rear_wear ?? "—"}`}
+            />
+          )}
+          {(job.pads_front_mm != null || job.pads_rear_mm != null) && (
+            <Row
+              label="Pads (mm)"
+              value={`Front ${job.pads_front_mm ?? "—"} · Rear ${job.pads_rear_mm ?? "—"}`}
+            />
+          )}
           {job.tyres && <Row label="Tyres" value={job.tyres} />}
           {job.exhaust && <Row label="Exhaust" value={job.exhaust} />}
+          {job.screenwash && <Row label="Screenwash" value={job.screenwash} />}
+          {job.oil && <Row label="Oil" value={job.oil} />}
           {job.notes && <Row label="Job details" value={job.notes} />}
         </CardContent>
       </Card>

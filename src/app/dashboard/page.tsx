@@ -94,7 +94,7 @@ export default async function DashboardPage() {
   // Mechanics get one screen, not this overview (Sept 2026 — see the
   // comment on MECHANIC_LINKS in site-nav.tsx).
   if (staff?.isMechanic) redirect("/dashboard/jobs/mechanic")
-  const firstName = staff?.email?.split("@")[0]?.split(/[._]/)[0]
+  const firstName = staff?.fullName?.split(/\s+/)[0]
   const canManageStock = staff?.canManageStock ?? false
 
   const supabase = await createClient()
